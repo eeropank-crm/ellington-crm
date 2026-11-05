@@ -227,3 +227,8 @@ paigaldusprotsess enam ei tööta; automaatset lukumurdmist pole.
 Zone'i täpset protsessijuhtimise seadistust, võrgu-/TLS-ühendust ja tootmisskeemi
 pole siin kinnitatud. Käesoleva PR-i aruanne kirjeldab tegelikult läbi proovitud
 isoleeritud testi ja selle piire.
+
+MariaDB esituslike erinevuste ja juba olemasolevate v8 tabelite puuduvate
+indeksite korral vaata [skeemi ühilduvuse juhendit](schema-compatibility.md).
+Uus migratsioonijärjekord sisaldab ka `003_v8_lookup_indexes.js`; seniste
+migratsioonide ajalugu ei tohi selleks käsitsi muuta.
