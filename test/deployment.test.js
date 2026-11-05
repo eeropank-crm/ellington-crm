@@ -114,7 +114,7 @@ test('lookup index repair preserves synthetic records and is restartable',{skip:
   const name=indexes.find(i=>i.COLUMN_NAME===item.columns[0]).INDEX_NAME;
   await db.schema.alterTable(item.table,t=>t.dropIndex([],name));
  }
- await db('knex_migrations').where({name:'003_v8_lookup_indexes.js'}).delete();
+ await db('knex_migrations').whereIn('name',['003_v8_lookup_indexes.js','004_legacy_v8_transition.js']).delete();
  assert.equal(validate(await inspect(db)).ok,true);
  await db.migrate.latest({directory:path.join(source,'database/migrations')});
  const after=await inspect(db);assert.equal(validate(after,true).ok,true);

@@ -52,4 +52,3 @@ SELECT
   COUNT(CASE WHEN `created_at` IS NULL THEN 1 END) AS `created_at_null`,
   COUNT(CASE WHEN CAST(`created_at` AS CHAR) LIKE '0000-%' THEN 1 END) AS `created_at_zero_timestamp`
 FROM `crm_portfolio_transfers`;
-
