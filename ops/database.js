@@ -25,19 +25,28 @@ function clientOptions(config, dir) {
   fs.writeFileSync(file,'[client]\n'+Object.entries({host:c.host,port:c.port,user:c.user,password:c.password,'default-character-set':'utf8mb4'}).map(([k,v])=>k+'='+quote(v)).join('\n')+'\n',{mode:0o600,flag:'wx'});
   return file;
 }
+function variant(command) {
+  const result=spawnSync(command,['--version'],{encoding:'utf8',maxBuffer:1024*1024});
+  if(result.error||result.status!==0)throw Error('Andmebaasi klienditööriista versiooni ei saanud kontrollida.');
+  if(/MariaDB/i.test(result.stdout))return 'mariadb';
+  if(/MySQL/i.test(result.stdout)||/Ver [89]\./.test(result.stdout))return 'mysql';
+  throw Error('Toetamata dump- või taastamiskliendi versioon.');
+}
 function dump(config,dir,command='mariadb-dump') {
+  const flavour=variant(command);
   const options=clientOptions(config,dir), destination=path.join(dir,'database.sql');
   const fd=fs.openSync(destination,'wx',0o600);
   try{
-    const result=spawnSync(command,['--defaults-extra-file='+options,'--single-transaction','--quick','--routines','--events','--triggers','--hex-blob','--no-tablespaces','--skip-add-locks',config.connection.database],{stdio:['ignore',fd,'pipe'],maxBuffer:1024*1024});
+    const result=spawnSync(command,['--defaults-file='+options,...(flavour==='mysql'?['--no-login-paths','--set-gtid-purged=OFF','--column-statistics=0']:[]),'--single-transaction','--quick','--routines','--events','--triggers','--hex-blob','--no-tablespaces','--skip-add-locks',config.connection.database],{stdio:['ignore',fd,'pipe'],maxBuffer:1024*1024});
     if(result.error||result.status!==0||fs.statSync(destination).size===0)throw Error('Andmebaasi dump ebaõnnestus; migratsioone ei alustata. Kontrolli klienditööriista ja varundusõigusi.');
     fs.fsyncSync(fd);
   }finally{fs.closeSync(fd);fs.unlinkSync(options);}
 }
 function importDump(config,dir,destination,command='mariadb') {
+  const flavour=variant(command);
   const options=clientOptions(config,dir), fd=fs.openSync(destination,'r');
   try {
-    const result=spawnSync(command,['--defaults-extra-file='+options,config.connection.database],{stdio:[fd,'ignore','pipe'],maxBuffer:1024*1024});
+    const result=spawnSync(command,['--defaults-file='+options,...(flavour==='mysql'?['--no-login-paths']:[]),config.connection.database],{stdio:[fd,'ignore','pipe'],maxBuffer:1024*1024});
     if(result.error||result.status!==0)throw Error('Taastamine tühja andmebaasi ebaõnnestus. Algandmebaasi ei muudetud; siht vajab eraldi kontrolli.');
   } finally{fs.closeSync(fd);fs.unlinkSync(options);}
 }

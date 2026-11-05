@@ -38,6 +38,7 @@ async function inspect(db) {
   const triggers = await db('information_schema.triggers').where({TRIGGER_SCHEMA:schema}).select('EVENT_OBJECT_TABLE');
   const schemaInfo=await db('information_schema.schemata').where({SCHEMA_NAME:schema}).first('DEFAULT_CHARACTER_SET_NAME');
   const checks=await db('information_schema.table_constraints as t').join('information_schema.check_constraints as c',function(){this.on('c.CONSTRAINT_SCHEMA','t.CONSTRAINT_SCHEMA').andOn('c.CONSTRAINT_NAME','t.CONSTRAINT_NAME');}).where('t.TABLE_SCHEMA',schema).where('t.CONSTRAINT_TYPE','CHECK').orderBy('t.TABLE_NAME').orderBy('t.CONSTRAINT_NAME').select('t.TABLE_NAME','c.CHECK_CLAUSE');
+  const routines=await db('information_schema.routines').where({ROUTINE_SCHEMA:schema}).select('ROUTINE_NAME');
   const events = await db('information_schema.events').where({EVENT_SCHEMA:schema}).select('EVENT_NAME');
   const foreign = await db('information_schema.key_column_usage').where({TABLE_SCHEMA:schema}).whereNotNull('REFERENCED_TABLE_NAME').select('TABLE_NAME','COLUMN_NAME');
   let applied = [];
@@ -45,10 +46,10 @@ async function inspect(db) {
   let locked = false;
   if (tables.some(t=>t.TABLE_NAME==='knex_migrations_lock')) locked=(await db('knex_migrations_lock').select('is_locked')).some(x=>Number(x.is_locked)!==0);
   const [[version]] = await db.raw('SELECT VERSION() AS version');
-  return {version:version.version, tables, columns, indexes, triggers, checks, events, foreign, applied, locked, charset:schemaInfo?.DEFAULT_CHARACTER_SET_NAME};
+  return {version:version.version, tables, columns, indexes, triggers, checks, routines, events, foreign, applied, locked, charset:schemaInfo?.DEFAULT_CHARACTER_SET_NAME};
 }
 function fingerprint(snapshot) {
-  return sha(JSON.stringify({tables:snapshot.tables, columns:snapshot.columns, indexes:snapshot.indexes, triggers:snapshot.triggers, checks:snapshot.checks, charset:snapshot.charset, events:snapshot.events, foreign:snapshot.foreign, applied:snapshot.applied}));
+  return sha(JSON.stringify({tables:snapshot.tables, columns:snapshot.columns, indexes:snapshot.indexes, triggers:snapshot.triggers, checks:snapshot.checks, routines:snapshot.routines, charset:snapshot.charset, events:snapshot.events, foreign:snapshot.foreign, applied:snapshot.applied}));
 }
 function validate(snapshot, final = false) {
   const errors = [];
@@ -69,6 +70,7 @@ function validate(snapshot, final = false) {
     if(expected[t.TABLE_NAME]&&!t.TABLE_COLLATION?.startsWith('utf8mb4_'))errors.push(t.TABLE_NAME+': tabeli vaikimisi märgistik peab olema utf8mb4.');
     if (t.TABLE_TYPE!=='BASE TABLE' || t.ENGINE!=='InnoDB') errors.push(t.TABLE_NAME+': varunduseks on nõutud InnoDB baastabel (vaated vajavad eraldi ülevaatust).');
   }
+  if(snapshot.routines.length) errors.push('Andmebaasi rutiinid vajavad eraldi skeemi- ja taastamisülevaatust.');
   if(snapshot.events.length) errors.push('Andmebaasis on ajastatud sündmused; nende mõju vajab eraldi ülevaatust.');
   for (const trigger of snapshot.triggers) if(expected[trigger.EVENT_OBJECT_TABLE]) errors.push(trigger.EVENT_OBJECT_TABLE+': tundmatu päästik vajab ülevaatust.');
   if (pending.includes('002_v8.js')) for(const fk of snapshot.foreign) {

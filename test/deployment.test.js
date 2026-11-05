@@ -3,7 +3,7 @@ const assert=require('node:assert/strict');
 const fs=require('node:fs');const path=require('node:path');const {spawnSync,spawn}=require('node:child_process');
 const {inspect,validate,fingerprint}=require('../ops/schema');const database=require('../ops/database');
 const contract=require('../ops/schema-contract.json');
-function reference(){return {version:'11.4.13-MariaDB',columns:structuredClone(contract.columns),indexes:structuredClone(contract.indexes),tables:[...new Set(contract.columns.map(c=>c.TABLE_NAME))].sort().map(TABLE_NAME=>({TABLE_NAME,TABLE_TYPE:'BASE TABLE',ENGINE:'InnoDB',TABLE_COLLATION:'utf8mb4_unicode_ci'})),triggers:[],checks:[],charset:'utf8mb4',events:[],foreign:[],applied:['001_base.js','002_v8.js'],locked:false};}
+function reference(){return {version:'11.4.13-MariaDB',columns:structuredClone(contract.columns),indexes:structuredClone(contract.indexes),tables:[...new Set(contract.columns.map(c=>c.TABLE_NAME))].sort().map(TABLE_NAME=>({TABLE_NAME,TABLE_TYPE:'BASE TABLE',ENGINE:'InnoDB',TABLE_COLLATION:'utf8mb4_unicode_ci'})),triggers:[],checks:[],routines:[],charset:'utf8mb4',events:[],foreign:[],applied:['001_base.js','002_v8.js'],locked:false};}
 test('schema gate rejects unsafe existing schemas without attempting repair',()=>{
  assert.equal(validate(reference(),true).ok,true);
  for(const mutate of [
@@ -13,6 +13,7 @@ test('schema gate rejects unsafe existing schemas without attempting repair',()=
   s=>s.tables[0].ENGINE='MyISAM',
   s=>s.triggers.push({EVENT_OBJECT_TABLE:'crm_clients'}),
   s=>s.events.push({EVENT_NAME:'unexpected_event'}),
+  s=>s.routines.push({ROUTINE_NAME:'unexpected_procedure'}),
   s=>s.checks.push({TABLE_NAME:'users',CHECK_CLAUSE:'length(name) < 10'}),
   s=>s.foreign.push({TABLE_NAME:'crm_clients',COLUMN_NAME:'google_id'}),
   s=>s.charset='latin1',
