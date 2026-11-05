@@ -3,15 +3,15 @@ const fs = require('node:fs');
 const path = require('node:path');
 const crypto = require('node:crypto');
 const contract = require('./schema-contract.json');
-const migrations = ['001_base.js', '002_v8.js'];
+const migrations = ['001_base.js', '002_v8.js', '003_v8_lookup_indexes.js'];
+const {type,equalDefaults,describe}=require('./schema-values');
+const {lookups}=require('../database/migrations/003_v8_lookup_indexes');
 const additions = {
   crm_clients: ['client_type', 'stop_reason', 'followup_count', 'client_comment', 'our_comment'],
   crm_templates: ['purpose', 'external_key', 'next_step_json']
 };
 const base = new Set(['users', 'user_sessions', 'crm_clients', 'crm_contacts', 'crm_templates', 'crm_activities', 'crm_activity_history', 'crm_budgets']);
 const sha = value => crypto.createHash('sha256').update(value).digest('hex');
-const type = value => value.toLowerCase().replace(/\b(bigint|int|smallint|tinyint|mediumint)\(\d+\)/g, '$1');
-const defaultValue = value => value === null ? null : String(value).toLowerCase().replace(/current_timestamp\(\)/g, 'current_timestamp').replace(/^'(.*)'$/, '$1');
 const extra = value => value.toLowerCase().replace(/default_generated\s*/g, '').replace(/current_timestamp\(\)/g, 'current_timestamp').trim();
 function groups(rows) {
   const out = {};
@@ -46,6 +46,9 @@ async function inspect(db) {
   let locked = false;
   if (tables.some(t=>t.TABLE_NAME==='knex_migrations_lock')) locked=(await db('knex_migrations_lock').select('is_locked')).some(x=>Number(x.is_locked)!==0);
   const [[version]] = await db.raw('SELECT VERSION() AS version');
+  // mysql2 exposes MySQL string defaults unquoted; MariaDB exposes SQL literals.
+  // Non-enumerable annotation keeps existing backup fingerprints unchanged.
+  for(const c of columns)Object.defineProperty(c,'defaultDialect',{value:/MariaDB/i.test(version.version)?'mariadb':'mysql'});
   return {version:version.version, tables, columns, indexes, triggers, checks, routines, events, foreign, applied, locked, charset:schemaInfo?.DEFAULT_CHARACTER_SET_NAME};
 }
 function fingerprint(snapshot) {
@@ -103,7 +106,7 @@ function validate(snapshot, final = false) {
       if (label==='user_sessions.sess' && ['json','longtext'].includes(type(a.COLUMN_TYPE))) compatible=true;
       if(!compatible) errors.push(label+': veerutüüp ei sobi või migratsioon kitsendaks seda.');
       if(a.IS_NULLABLE!==c.IS_NULLABLE) errors.push(label+': NULL-piirang erineb.');
-      if(defaultValue(a.COLUMN_DEFAULT)!==defaultValue(c.COLUMN_DEFAULT)) errors.push(label+': vaikeväärtus erineb.');
+      if(!equalDefaults(a,c)) errors.push(label+': vaikeväärtus erineb.');
       if(extra(a.EXTRA)!==extra(c.EXTRA)) errors.push(label+': automaatväärtuse või genereerimise reegel erineb.');
       if(c.CHARACTER_SET_NAME && a.CHARACTER_SET_NAME!=='utf8mb4' && !(label==='user_sessions.sess'&&type(a.COLUMN_TYPE)==='json')) errors.push(label+': nõutud on utf8mb4.');
     }
@@ -112,10 +115,27 @@ function validate(snapshot, final = false) {
   const wantedKeys=keys(contract.indexes), actualKeys=keys(snapshot.indexes);
   for(const k of wantedKeys) if(actual[k.table]) {
     const match=actualKeys.some(a=>a.table===k.table&&(!k.primary||a.primary)&&(!k.unique||a.unique)&&JSON.stringify(a.columns.slice(0,k.columns.length))===JSON.stringify(k.columns)&&(!k.unique||a.columns.length===k.columns.length));
-    if(!match) errors.push(k.table+': puuduv indeks ('+k.columns.join(', ')+').');
+    if(!match){
+      const planned=!final&&pending.includes('003_v8_lookup_indexes.js')&&!k.unique&&lookups.some(x=>x.table===k.table&&JSON.stringify(x.columns)===JSON.stringify(k.columns))&&k.columns.every(name=>actual[k.table].some(c=>c.COLUMN_NAME===name));
+      if(!planned)errors.push(k.table+': puuduv indeks ('+k.columns.join(', ')+').');
+      else {const repair=lookups.find(x=>x.table===k.table&&JSON.stringify(x.columns)===JSON.stringify(k.columns));if(snapshot.indexes.some(i=>i.TABLE_NAME===k.table&&i.INDEX_NAME===repair.name))errors.push(k.table+': paranduse indeksi nimi on juba teise definitsiooni kasutuses.');}
+    }
   }
   for(const k of actualKeys) if(expected[k.table]&&k.unique&&!wantedKeys.some(a=>a.table===k.table&&a.unique&&JSON.stringify(a.columns)===JSON.stringify(k.columns))) errors.push(k.table+': täiendav unikaalsuspiirang vajab ülevaatust.');
   if(final&&pending.length) errors.push('Kõik migratsioonid ei ole lõpetatud.');
   return {ok:!errors.length, errors:[...new Set(errors)], pending, tables:snapshot.tables.length, schemaHash:fingerprint(snapshot)};
 }
-module.exports={inspect,validate,fingerprint,sha,migrations};
+function diagnostics(snapshot){
+ const actual=groups(snapshot.columns), expected=groups(contract.columns), findings=[];
+ for(const [table,columns]of Object.entries(expected))for(const c of columns){
+  const a=actual[table]?.find(x=>x.COLUMN_NAME===c.COLUMN_NAME);
+  if(!a){findings.push({table,column:c.COLUMN_NAME,classification:'missing',expected:describe(c)});continue;}
+  const fields=['COLUMN_TYPE','COLUMN_DEFAULT','IS_NULLABLE','EXTRA','CHARACTER_SET_NAME'].filter(k=>a[k]!==c[k]);
+  if(!fields.length)continue;
+  const representationOnly=type(a.COLUMN_TYPE)===type(c.COLUMN_TYPE)&&equalDefaults(a,c)&&a.IS_NULLABLE===c.IS_NULLABLE&&extra(a.EXTRA)===extra(c.EXTRA)&&a.CHARACTER_SET_NAME===c.CHARACTER_SET_NAME;
+  findings.push({table,column:c.COLUMN_NAME,fields,classification:representationOnly?'representation_only':'requires_review',expected:describe(c),actual:describe(a)});
+ }
+ const actualKeys=keys(snapshot.indexes), missingIndexes=keys(contract.indexes).filter(k=>actual[k.table]&&!actualKeys.some(a=>a.table===k.table&&(!k.primary||a.primary)&&(!k.unique||a.unique)&&JSON.stringify(a.columns.slice(0,k.columns.length))===JSON.stringify(k.columns)&&(!k.unique||a.columns.length===k.columns.length))).map(k=>({table:k.table,columns:k.columns,unique:k.unique,plannedMigration:!snapshot.applied.includes('003_v8_lookup_indexes.js')&&!k.unique&&k.columns.every(name=>actual[k.table].some(c=>c.COLUMN_NAME===name))&&lookups.some(x=>x.table===k.table&&JSON.stringify(x.columns)===JSON.stringify(k.columns)&&!snapshot.indexes.some(i=>i.TABLE_NAME===k.table&&i.INDEX_NAME===x.name))?'003_v8_lookup_indexes.js':null}));
+ return {formatVersion:1,serverVersion:/^[0-9.]+(?:-MariaDB)?/.exec(snapshot.version)?.[0]||'unknown',columns:findings,missingIndexes,redaction:'String defaults, enum members, expressions, credentials, database/host names and row data are not exported.'};
+}
+module.exports={inspect,validate,diagnostics,fingerprint,sha,migrations};

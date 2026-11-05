@@ -5,20 +5,20 @@ const fs=require('node:fs');
 const path=require('node:path');
 const crypto=require('node:crypto');
 const {spawnSync}=require('node:child_process');
-const {inspect,validate,fingerprint,sha}=require('./schema');
+const {inspect,validate,diagnostics,fingerprint,sha}=require('./schema');
 const database=require('./database');
 process.umask(0o077);
 const source=path.resolve(__dirname,'..');
 const required=['package.json','package-lock.json','public/index.html','private/dashboard.html','private/v8/prototuup_v8.html','server/index.js','server/app.js','server/db.js','server/session.js','server/auth.js','server/work-mode.js',
  'server/routes/login.js','server/routes/account.js','server/routes/crm.js','server/routes/crm_v8_extension.js','server/routes/crm_budget_extension.js','server/routes/crm_mail_extension.js','server/routes/crm_imap_extension.js','server/services/activity-workflow.js',
- 'database/001_users.sql','database/002_sessions.sql','database/migrations/001_base.js','database/migrations/002_v8.js','ops/schema-contract.json','ops/schema.js','ops/database.js','ops/deploy.js','ops/pm2-control.js'];
-const flags=new Set(['env','host','database','root','control','revision','backup','dump-command','client-command','maintenance-confirmed','offline','restored']);
+ 'database/001_users.sql','database/002_sessions.sql','database/migrations/001_base.js','database/migrations/002_v8.js','database/migrations/003_v8_lookup_indexes.js','ops/schema-values.js','ops/schema-diagnostics.sql','ops/schema-contract.json','ops/schema.js','ops/database.js','ops/deploy.js','ops/pm2-control.js'];
+const flags=new Set(['env','host','database','root','control','revision','backup','dump-command','client-command','maintenance-confirmed','offline','restored','diagnostics']);
 function args(argv){
  const [command,...rest]=argv, out={command};
  for(let i=0;i<rest.length;i++){
   const key=rest[i].replace(/^--/,'');
   if(rest[i]!==('--'+key)||!flags.has(key)||Object.hasOwn(out,key))throw Error('Vigane või korduv argument.');
-  out[key]=['maintenance-confirmed','offline','restored'].includes(key)?true:rest[++i];
+  out[key]=['maintenance-confirmed','offline','restored','diagnostics'].includes(key)?true:rest[++i];
   if(out[key]===undefined||String(out[key]).startsWith('--'))throw Error('Argumendi väärtus puudub.');
  }
  if(!['preflight','apply','rollback','restore-empty'].includes(command))throw Error('Käsk: preflight | apply | rollback | restore-empty.');
@@ -199,7 +199,7 @@ async function main(){
  try{
   if(options.command==='preflight'){
    const snapshot=await inspect(db),plan=validate(snapshot);const files=inventory(options.revision);
-   console.log(JSON.stringify({...plan,source:files},null,2));if(!plan.ok)process.exitCode=1;return;
+   console.log(JSON.stringify({...plan,source:files,...(options.diagnostics?{diagnostics:diagnostics(snapshot)}:{})},null,2));if(!plan.ok)process.exitCode=1;return;
   }
   if(!options.root||!path.isAbsolute(options.root))throw Error('Nõutud on absoluutne --root.');
   const root=privateDir(options.root);privateDir(path.join(root,'backups'));privateDir(path.join(root,'releases'));
