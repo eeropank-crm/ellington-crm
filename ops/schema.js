@@ -3,7 +3,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const crypto = require('node:crypto');
 const contract = require('./schema-contract.json');
-const migrations = ['001_base.js', '002_v8.js', '003_v8_lookup_indexes.js'];
+const migrations = ['001_base.js', '002_v8.js', '003_v8_lookup_indexes.js', '004_legacy_v8_transition.js'];
 const {type,equalDefaults,describe}=require('./schema-values');
 const {lookups}=require('../database/migrations/003_v8_lookup_indexes');
 const additions = {
@@ -54,9 +54,12 @@ async function inspect(db) {
 function fingerprint(snapshot) {
   return sha(JSON.stringify({tables:snapshot.tables, columns:snapshot.columns, indexes:snapshot.indexes, triggers:snapshot.triggers, checks:snapshot.checks, routines:snapshot.routines, charset:snapshot.charset, events:snapshot.events, foreign:snapshot.foreign, applied:snapshot.applied}));
 }
-function validate(snapshot, final = false) {
+function validate(snapshot, final = false, transition = null) {
   const errors = [];
-  const expected = groups(contract.columns), actual = groups(snapshot.columns);
+  const allowedTransition=!final&&transition?.changes?.length>0&&transition?.ok===true&&transition.snapshotHash===fingerprint(snapshot)&&transition.serverVersion===snapshot.version&&!snapshot.applied.includes('004_legacy_v8_transition.js');
+  const effective=allowedTransition?require('./legacy-transition').project(snapshot).projected:snapshot;
+  const expected = groups(contract.columns), actual = groups(effective.columns);
+  if(transition&&!transition.ok)errors.push(...transition.errors);
   if(!actual.users||!actual.user_sessions)errors.push('Senine autentimisskeem puudub; kontrolli, et valitud on õige olemasolev andmebaas.');
   const pending = migrations.filter(m=>!snapshot.applied.includes(m));
   const migrationFiles=fs.readdirSync(path.join(__dirname,'../database/migrations')).filter(f=>f.endsWith('.js')).sort();

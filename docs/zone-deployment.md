@@ -232,3 +232,8 @@ MariaDB esituslike erinevuste ja juba olemasolevate v8 tabelite puuduvate
 indeksite korral vaata [skeemi ühilduvuse juhendit](schema-compatibility.md).
 Uus migratsioonijärjekord sisaldab ka `003_v8_lookup_indexes.js`; seniste
 migratsioonide ajalugu ei tohi selleks käsitsi muuta.
+
+PR #4 järel kogutud 52 konkreetse pärandskeemi erinevuse jaoks vaata
+[üleminekumigratsiooni analüüsi ja lisapäringuid](legacy-schema-transition.md).
+Selle ülemineku järjekord on 001 → 002 → 003 → 004; neljandat migratsiooni lubab
+range eelkontroll ainult teadaoleva lähteprofiili ja nulltulemustega andmekontrollide korral.
