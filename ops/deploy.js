@@ -7,11 +7,13 @@ const crypto=require('node:crypto');
 const {spawnSync}=require('node:child_process');
 const {inspect,validate,diagnostics,fingerprint,sha}=require('./schema');
 const database=require('./database');
+const transition=require('./legacy-transition');
+const audit=require('./data-audit');
 process.umask(0o077);
 const source=path.resolve(__dirname,'..');
 const required=['package.json','package-lock.json','public/index.html','private/dashboard.html','private/v8/prototuup_v8.html','server/index.js','server/app.js','server/db.js','server/session.js','server/auth.js','server/work-mode.js',
  'server/routes/login.js','server/routes/account.js','server/routes/crm.js','server/routes/crm_v8_extension.js','server/routes/crm_budget_extension.js','server/routes/crm_mail_extension.js','server/routes/crm_imap_extension.js','server/services/activity-workflow.js',
- 'database/001_users.sql','database/002_sessions.sql','database/migrations/001_base.js','database/migrations/002_v8.js','database/migrations/003_v8_lookup_indexes.js','ops/schema-values.js','ops/schema-diagnostics.sql','ops/schema-contract.json','ops/schema.js','ops/database.js','ops/deploy.js','ops/pm2-control.js'];
+ 'database/001_users.sql','database/002_sessions.sql','database/migrations/001_base.js','database/migrations/002_v8.js','database/migrations/003_v8_lookup_indexes.js','database/migrations/004_legacy_v8_transition.js','ops/legacy-transition.js','ops/legacy-v8-profile.json','ops/data-audit.js','ops/legacy-transition-guards.sql','ops/schema-values.js','ops/schema-diagnostics.sql','ops/schema-contract.json','ops/schema.js','ops/database.js','ops/deploy.js','ops/pm2-control.js'];
 const flags=new Set(['env','host','database','root','control','revision','backup','dump-command','client-command','maintenance-confirmed','offline','restored','diagnostics']);
 function args(argv){
  const [command,...rest]=argv, out={command};
@@ -51,7 +53,7 @@ function writeJSON(file,value){
  const fd=fs.openSync(tmp,'r');try{fs.fsyncSync(fd);}finally{fs.closeSync(fd);}fs.renameSync(tmp,file);syncPath(path.dirname(file));
 }
 function fileHash(file){const h=crypto.createHash('sha256');const fd=fs.openSync(file,'r'),buffer=Buffer.alloc(1024*1024);try{let n;while((n=fs.readSync(fd,buffer,0,buffer.length,null)))h.update(buffer.subarray(0,n));}finally{fs.closeSync(fd);}return h.digest('hex');}
-function checkPlan(snapshot,final=false){const plan=validate(snapshot,final);if(!plan.ok)throw Error('Skeemi eelkontroll peatas töö: '+plan.errors.join(' '));return plan;}
+async function checkPlan(db,snapshot,final=false){const evidence=final?null:await transition.assess(db,snapshot);const plan=validate(snapshot,final,evidence);if(!plan.ok)throw Error('Skeemi eelkontroll peatas töö: '+plan.errors.join(' '));return plan;}
 function unchangedEnv(config){if(fileHash(config.envPath)!==config.hash)throw Error('.env muutus paigalduse ajal; töö peatatud.');}
 function current(root){const link=path.join(root,'current');if(!fs.lstatSync(link).isSymbolicLink())throw Error('root/current peab olema sümbollink olemasolevale rakendusele.');return fs.realpathSync(link);}
 function switchTo(root,dir){const tmp=path.join(root,'.current-'+crypto.randomBytes(4).toString('hex'));fs.symlinkSync(dir,tmp);fs.renameSync(tmp,path.join(root,'current'));syncPath(root);}
@@ -114,7 +116,7 @@ async function apply(options,config,db,root){
  const old=current(root);
  if(root===old||root.startsWith(old+path.sep))throw Error('Paigalduskaust ei tohi asuda varundatava rakenduse sees.');
  if(fs.realpathSync(path.join(old,'.env'))!==config.envPath)throw Error('--env ei vasta praeguse rakenduse .env failile.');
- const initial=await inspect(db);checkPlan(initial);
+ const initial=await inspect(db);await checkPlan(db,initial);
  const id=new Date().toISOString().replace(/[-:.]/g,'')+'-'+crypto.randomBytes(4).toString('hex');
  const dir=privateDir(path.join(root,'backups',id)),release=path.join(root,'releases',id);
  const manifest={id,root,old,release,revision:releaseInfo.revision,envPath:config.envPath,envHash:config.hash,phase:'prepared',backupComplete:false,migrationStarted:false};
@@ -122,9 +124,10 @@ async function apply(options,config,db,root){
  save();let stopped=false;
  try{
   stop(options,old,config);stopped=true;
-  const before=await inspect(db),plan=checkPlan(before);
+  const before=await inspect(db),plan=await checkPlan(db,before);
   if(fingerprint(initial)!==fingerprint(before))throw Error('Skeem muutus eelkontrolli ja hoolduspausi vahel.');
   manifest.before=before;manifest.pending=plan.pending;manifest.counts=await database.counts(db,before);manifest.phase='backing-up';save();
+  manifest.dataAudit=await audit.capture(db,before,{allowDefaultReasons:true});save();
   unchangedEnv(config);
   run('tar',['-czf',path.join(dir,'code.tar.gz'),'--exclude=node_modules','--exclude=.git','-C',old,'.']);
   fs.copyFileSync(config.envPath,path.join(dir,'env.snapshot'));fs.chmodSync(path.join(dir,'env.snapshot'),0o600);
@@ -141,7 +144,8 @@ async function apply(options,config,db,root){
    manifest.migrationStarted=true;manifest.phase='migrating';save();
    await db.migrate.latest({directory:path.join(release,'database/migrations')});
   }
-  const after=await inspect(db);checkPlan(after,true);
+  const after=await inspect(db);await checkPlan(db,after,true);
+  await audit.verify(db,after,manifest.dataAudit);
   const afterCounts=await database.counts(db,after);
   for(const [table,count]of Object.entries(manifest.counts))if(!['knex_migrations','knex_migrations_lock','crm_v8_stop_reasons'].includes(table)&&afterCounts[table]!==count)throw Error('Olemasoleva tabeli kirjete arv muutus ootamatult: '+table);
   manifest.afterSchemaHash=fingerprint(after);manifest.phase='migrated';save();
@@ -198,8 +202,8 @@ async function main(){
  let lock;
  try{
   if(options.command==='preflight'){
-   const snapshot=await inspect(db),plan=validate(snapshot);const files=inventory(options.revision);
-   console.log(JSON.stringify({...plan,source:files,...(options.diagnostics?{diagnostics:diagnostics(snapshot)}:{})},null,2));if(!plan.ok)process.exitCode=1;return;
+   const snapshot=await inspect(db),evidence=await transition.assess(db,snapshot),plan=validate(snapshot,false,evidence);const files=inventory(options.revision);
+   console.log(JSON.stringify({...plan,source:files,...(options.diagnostics?{diagnostics:diagnostics(snapshot),transition:{ok:evidence.ok,changes:evidence.changes,checks:evidence.checks,errors:evidence.errors}}:{})},null,2));if(!plan.ok)process.exitCode=1;return;
   }
   if(!options.root||!path.isAbsolute(options.root))throw Error('Nõutud on absoluutne --root.');
   const root=privateDir(options.root);privateDir(path.join(root,'backups'));privateDir(path.join(root,'releases'));
