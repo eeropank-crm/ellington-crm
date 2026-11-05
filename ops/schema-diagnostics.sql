@@ -1,6 +1,5 @@
 -- Run while the intended database is selected. SELECT only; no application rows.
 -- String defaults, ENUM/SET members and arbitrary expressions are redacted.
-START TRANSACTION READ ONLY;
 SELECT SUBSTRING_INDEX(VERSION(), '-', 1) AS server_version,
        DEFAULT_CHARACTER_SET_NAME, DEFAULT_COLLATION_NAME
 FROM information_schema.SCHEMATA WHERE SCHEMA_NAME = DATABASE();
@@ -123,4 +122,3 @@ ORDER BY TABLE_NAME, CONSTRAINT_TYPE;
 SELECT COUNT(*) AS migration_tracking_tables_present
 FROM information_schema.TABLES
 WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME IN ('knex_migrations','knex_migrations_lock');
-COMMIT;

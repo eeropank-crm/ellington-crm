@@ -63,7 +63,8 @@ after(async()=>{
 });
 test('read-only preflight inventories the tracked release and preserves schema and rows',{skip:!enabled},async()=>{
  const before=fingerprint(await inspect(db)),envHash=require('../ops/schema').sha(fs.readFileSync(envFile));
- const r=await cli('preflight');assert.equal(r.status,0,r.err);const plan=JSON.parse(r.out);assert.equal(plan.ok,true);assert.deepEqual(plan.pending,['001_base.js','002_v8.js','003_v8_lookup_indexes.js']);assert.ok(plan.source.requiredFiles>20);
+ const r=await cli('preflight',['--diagnostics']);assert.equal(r.status,0,r.err);const plan=JSON.parse(r.out);assert.equal(plan.ok,true);assert.deepEqual(plan.pending,['001_base.js','002_v8.js','003_v8_lookup_indexes.js']);assert.ok(plan.source.requiredFiles>20);assert.equal(plan.diagnostics.formatVersion,1);
+ await database.importDump(options,root,path.join(source,'ops/schema-diagnostics.sql'),path.resolve(process.env.DEPLOY_CLIENT_COMMAND));
  assert.equal(fingerprint(await inspect(db)),before);assert.equal(require('../ops/schema').sha(fs.readFileSync(envFile)),envHash);
  assert.equal((await db('crm_clients').first()).notes,'DO NOT OVERWRITE');
 });
@@ -101,7 +102,13 @@ test('full isolated apply backs up before migrating and preserves records, env a
 });
 test('lookup index repair preserves synthetic records and is restartable',{skip:!enabled},async()=>{
  const repair=require('../database/migrations/003_v8_lookup_indexes');
- const before={};for(const name of ['crm_clients','crm_activity_history','users'])before[name]=await db(name).select('*');
+ const client=await db('crm_clients').first(),user=await db('users').first();
+ const [activity]=await db('crm_activities').insert({client_id:client.id,owner_user_id:user.id,type:'Kõne',status:'active',due_date:'2099-01-01'});
+ await db('crm_v8_activity_events').insert({activity_id:activity,user_id:user.id,event_type:'synthetic_preservation',details:'{"comment":"säilita sünteetiline tulemus"}'});
+ await db('crm_budget_change_log').insert({client_id:client.id,user_id:user.id,year:2026,before_annual:0,after_annual:12.5,reason:'Sünteetiline säilitamistest'});
+ const [transfer]=await db('crm_portfolio_transfers').insert({from_user_id:user.id,to_user_id:user.id,performed_by:user.id,client_count:1,activity_count:1});
+ await db('crm_ionprint_sync_queue').insert({transfer_id:transfer,client_id:client.id,target_owner_user_id:user.id,status:'awaiting_mapping'});
+ const before={};for(const name of ['crm_clients','crm_activities','crm_activity_history','users','crm_v8_activity_events','crm_budget_change_log','crm_ionprint_sync_queue'])before[name]=await db(name).select('*');
  for(const item of repair.lookups){
   const indexes=await db('information_schema.statistics').where({TABLE_SCHEMA:options.env.DB_NAME,TABLE_NAME:item.table});
   const name=indexes.find(i=>i.COLUMN_NAME===item.columns[0]).INDEX_NAME;
