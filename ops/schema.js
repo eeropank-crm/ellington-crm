@@ -46,6 +46,9 @@ async function inspect(db) {
   let locked = false;
   if (tables.some(t=>t.TABLE_NAME==='knex_migrations_lock')) locked=(await db('knex_migrations_lock').select('is_locked')).some(x=>Number(x.is_locked)!==0);
   const [[version]] = await db.raw('SELECT VERSION() AS version');
+  // mysql2 exposes MySQL string defaults unquoted; MariaDB exposes SQL literals.
+  // Non-enumerable annotation keeps existing backup fingerprints unchanged.
+  for(const c of columns)Object.defineProperty(c,'defaultDialect',{value:/MariaDB/i.test(version.version)?'mariadb':'mysql'});
   return {version:version.version, tables, columns, indexes, triggers, checks, routines, events, foreign, applied, locked, charset:schemaInfo?.DEFAULT_CHARACTER_SET_NAME};
 }
 function fingerprint(snapshot) {

@@ -21,6 +21,12 @@ test('MariaDB presentation aliases normalize without weakening unsigned, enum or
  assert.equal(equalDefaults(column('timestamp','CURRENT_TIMESTAMP(0)'),column('timestamp','current_timestamp()')),true);
  assert.equal(equalDefaults(column('timestamp(6)','CURRENT_TIMESTAMP(6)'),column('timestamp','current_timestamp()')),false);
  assert.equal(equalDefaults(column('varchar(100)',"'ACTIVE'"),column('varchar(100)',"'active'")),false);
+ assert.equal(equalDefaults(column('varchar(100)',' active '),column('varchar(100)',"'active'")),false);
+ const mysqlString=(value)=>({...column('varchar(100)',value,'YES'),defaultDialect:'mysql'});
+ assert.equal(equalDefaults(mysqlString('active'),column('varchar(100)',"'active'",'YES')),true);
+ assert.equal(equalDefaults(mysqlString("'active'"),column('varchar(100)',"'active'",'YES')),false);
+ assert.equal(equalDefaults(mysqlString('NULL'),column('varchar(100)',null,'YES')),false);
+ assert.equal(equalDefaults(mysqlString('NULL'),column('varchar(100)',"'NULL'",'YES')),true);
 });
 test('cross-driver nullable NULL and quoted numeric defaults pass; genuine default changes block',()=>{
  const snapshot=reference();
@@ -48,6 +54,16 @@ test('only three known nonunique indexes can be deferred to the new pending migr
  assert.equal(validate(snapshot).ok,true);assert.equal(validate(snapshot,true).ok,false);
  assert.equal(diagnostics(snapshot).missingIndexes.length,3);
  assert.ok(diagnostics(snapshot).missingIndexes.every(i=>i.plannedMigration==='003_v8_lookup_indexes.js'));
+ const collision=structuredClone(snapshot),item=lookups[0];
+ collision.indexes.push({TABLE_NAME:item.table,INDEX_NAME:item.name,NON_UNIQUE:1,SEQ_IN_INDEX:1,COLUMN_NAME:'id',SUB_PART:null});
+ assert.equal(validate(collision).ok,false);
+ assert.equal(diagnostics(collision).missingIndexes.find(i=>i.table===item.table).plannedMigration,null);
+ const {covered}=require('../database/migrations/003_v8_lookup_indexes');
+ const prefix=[...item.columns,'id'].map((COLUMN_NAME,i)=>({INDEX_NAME:'different_existing_name',SEQ_IN_INDEX:i+1,COLUMN_NAME,SUB_PART:null}));
+ assert.equal(covered(prefix,item.columns),true);
+ assert.equal(covered(prefix.map((r,i)=>i===0?{...r,SUB_PART:4}:r),item.columns),false);
+ assert.equal(covered([...prefix].map((r,i)=>({...r,SEQ_IN_INDEX:prefix.length-i})),item.columns),false);
+
  snapshot.indexes=snapshot.indexes.filter(i=>!(i.TABLE_NAME==='crm_email_outbox'&&i.COLUMN_NAME==='activity_id'));
  assert.equal(validate(snapshot).ok,false);
 });

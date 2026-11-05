@@ -21,9 +21,10 @@ function decimal(raw) {
 }
 function defaultValue(value,column) {
   if(value===null)return {kind:column.IS_NULLABLE==='YES'?'null':'absent'};
-  const raw=String(value).trim();
+  const original=String(value),raw=original.trim(),t=type(column.COLUMN_TYPE);
+  if(column.defaultDialect==='mysql'&&/^(varchar|char|enum|set|text|mediumtext|longtext)\b/.test(t))return {kind:'string',value:original};
   if(/^null$/i.test(raw))return {kind:'null'};
-  const decoded=literal(raw), t=type(column.COLUMN_TYPE);
+  const decoded=literal(raw);
   if(/^(tinyint|smallint|mediumint|int|bigint|decimal|float|double)\b/.test(t)){
     const number=decimal(decoded===null?raw:decoded);
     if(number!==null)return {kind:'number',value:number};
@@ -31,7 +32,7 @@ function defaultValue(value,column) {
   if(/^(timestamp|datetime)(?:\(|$)/.test(t)&&/^current_timestamp(?:\(0?\))?$/i.test(raw))return {kind:'current_timestamp',precision:0};
   // Expressions and strings with unknown escaping stay distinct, fail closed.
   if(decoded!==null)return {kind:'string',value:decoded};
-  if(/^(varchar|char|enum|set|text|mediumtext|longtext)\b/.test(t)&&!/[()'\\]/.test(raw))return {kind:'string',value:raw};
+  if(/^(varchar|char|enum|set|text|mediumtext|longtext)\b/.test(t)&&!/[()'\\]/.test(raw))return {kind:'string',value:original};
   return {kind:'expression',value:raw};
 }
 const equalDefaults=(a,b)=>JSON.stringify(defaultValue(a.COLUMN_DEFAULT,a))===JSON.stringify(defaultValue(b.COLUMN_DEFAULT,b));
