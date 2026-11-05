@@ -34,7 +34,7 @@ app.use("/api", require("./routes/account"));
 app.use("/api", require("./routes/crm"));
 
 app.get('/health', (req, res) => {
-  res.json({ status: 'ok' });
+  res.json({ status: 'ok', release: process.env.CRM_RELEASE_SHA || null });
 });
 
 module.exports = app;
