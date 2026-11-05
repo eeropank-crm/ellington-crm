@@ -104,7 +104,7 @@ module.exports = function(db) {
         .whereNull('i.handled_at');
       if(req.crmUser.role!=='admin')q=q.where('c.owner_user_id',req.crmUser.id);
       const alerts=await q.orderBy('i.received_at','desc').limit(100)
-        .select('i.id','i.client_id','c.name as client_name','i.sender','i.subject','i.received_at');
+        .select('i.id','i.client_id','c.owner_user_id','c.name as client_name','i.sender','i.subject','i.received_at');
       res.set('Cache-Control','no-store');res.json({alerts});
     }catch(e){next(e)}
   });
