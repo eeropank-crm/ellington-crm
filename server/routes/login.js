@@ -32,10 +32,11 @@ router.post('/login', async (req, res, next) => {
     req.session.regenerate(err => {
       if (err) return next(err);
       req.session.userId = user.id;
+      req.session.workMode = 'user';
       req.session.save(err => {
         if (err) return next(err);
         attempts.delete(key);
-        res.json({ user: { name: user.name, role: user.role } });
+        res.json({ user: require('../work-mode').sessionUser(user, req.session) });
       });
     });
   } catch (err) {

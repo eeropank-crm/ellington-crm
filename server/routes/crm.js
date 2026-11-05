@@ -25,7 +25,7 @@ router.use(async (req, res, next) => {
       });
     }
 
-    req.crmUser = user;
+    req.crmUser = require('../work-mode').sessionUser(user, req.session);
     next();
   } catch (error) {
     next(error);
@@ -48,6 +48,10 @@ router.get('/clients/:id', async (req, res, next) => {
 
     if (!client) {
       return res.status(404).json({ error: 'Klienti ei leitud.' });
+    }
+
+    if (req.crmUser.role !== 'admin' && Number(client.owner_user_id) !== Number(req.crmUser.id)) {
+      return res.status(403).json({ error: 'Klient ei kuulu sinu portfelli.' });
     }
 
     const contacts = await db('crm_contacts')
@@ -74,6 +78,7 @@ router.get('/clients/:id', async (req, res, next) => {
     const activities = await db('crm_activities as a')
       .leftJoin('crm_activity_details as d','d.activity_id','a.id')
       .where('a.client_id',id)
+      .modify(q => { if (req.crmUser.role !== 'admin') q.where('a.owner_user_id', req.crmUser.id); })
       .select('a.*','d.purpose','d.instructions','d.subject','d.template_id','d.next_step_json')
       .orderBy('a.due_date','asc');
     activities.forEach(a=>{a.nextStep=workflow.parse(a.next_step_json);a.due_date=workflow.dateOnly(a.due_date)});
@@ -134,6 +139,7 @@ router.get('/clients/:id', async (req, res, next) => {
         name: client.name,
         client_type: client.client_type,
         owner_name: owner ? owner.name : null,
+        owner_user_id: client.owner_user_id,
         stop_reason: client.stop_reason,
         followup_count: client.followup_count,
         client_comment: client.client_comment,
@@ -168,6 +174,7 @@ router.get('/clients', async (req, res, next) => {
         this.where('c.name', 'like', '%' + search + '%')
           .orWhere('ct.name', 'like', '%' + search + '%');
       })
+      .modify(q => { if (req.crmUser.role !== 'admin') q.where('c.owner_user_id', req.crmUser.id); })
       .distinct(
         'c.id',
         'c.name',

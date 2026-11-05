@@ -90,6 +90,7 @@ test('admin portfolio transfer writes audit and queue; ownership blocks changes'
   await db('users').where({id:fixture.admin}).update({password_hash:await require('bcryptjs').hash(password,10)});
   const login=await api('/api/login',{email:'crm-admin@example.invalid',password});
   cookie=login.res.headers.get('set-cookie').split(';')[0];
+  await api('/api/work-mode',{mode:'admin'});
   await api('/api/admin/portfolio-history');
   const result=(await api('/api/admin/portfolio-transfer',{from_user_id:fixture.sales,to_user_id:fixture.admin,client_ids:[fixture.client]})).data;
   assert.equal(result.transferred,1);

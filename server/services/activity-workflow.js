@@ -10,13 +10,13 @@ const validDate = d => typeof d === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(d) &&
 const text = (v, max, label, min=0) => { if (v==null) v=''; if(typeof v!=='string'||v.trim().length<min||v.trim().length>max) fail(400,'Kontrolli välja: '+label+'.'); return v.trim(); };
 const parse = s => { try { return typeof s === 'object' && s !== null ? s : JSON.parse(s || '{}'); } catch { return {}; } };
 const event = (trx,id,user,type,details) => trx('crm_v8_activity_events').insert({activity_id:id,user_id:user.id,event_type:type,details:JSON.stringify(details)});
-const allowed = (user,c) => { if(user.role!=='admin'&&Number(c.owner_user_id)!==Number(user.id)) fail(403,'Klient ei kuulu sinu portfelli.'); };
+const allowed = (user,c) => { if(Number(c.owner_user_id)!==Number(user.id)) fail(403,'Klient ei kuulu sinu portfelli.'); };
 async function lockClient(trx,id,user) { const c=await trx('crm_clients').where({id}).forUpdate().first(); if(!c) fail(404,'Klienti ei leitud.'); allowed(user,c); return c; }
 async function lockActivity(trx,id,user) {
   const ref=await trx('crm_activities').where({id}).first('client_id'); if(!ref) fail(404,'Tegevust ei leitud.');
   const client=await lockClient(trx,ref.client_id,user);
   const activity=await trx('crm_activities').where({id}).forUpdate().first();
-  if(user.role!=='admin'&&Number(activity.owner_user_id)!==Number(user.id)) fail(403,'Tegevus ei kuulu sulle.');
+  if(Number(activity.owner_user_id)!==Number(user.id)) fail(403,'Tegevus ei kuulu sulle.');
   return {activity,client};
 }
 async function validateReplies(trx,clientId,ids) {
@@ -80,6 +80,7 @@ async function stop(trx,clientId,user,reason,replyIds) {
   const c=await lockClient(trx,clientId,user); reason=text(reason,1000,'lõpetamise põhjus',5);
   if(c.stop_reason) return {stopped:true,already_stopped:true};
   const activities=await trx('crm_activities').where({client_id:clientId,status:'active'}).orderBy('id').forUpdate().select('*');
+  if(activities.some(a => Number(a.owner_user_id) !== Number(user.id))) fail(403,'Kliendil on teisele töötajale kuuluv tegevus.');
   if(activities.length) {
     const sending=await trx('crm_email_outbox').whereIn('activity_id',activities.map(a=>a.id)).whereIn('status',['sending','uncertain','sent']).first();
     if(sending) fail(409,'Kliendil on kinnitamist vajav e-kirja saatmine. Kontrolli selle tegevuse saatmisolekut enne jälgimise lõpetamist.');
