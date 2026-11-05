@@ -262,3 +262,12 @@ selgesõnaliselt `--health-host 127.0.135.83`.
 See muudatus ei paigalda midagi serverisse ega muuda esimese paigalduse
 `failed` žurnaali: seal peatati protsess vale tervisekontrolli aadressi tõttu
 ja õige versiooni toimimine kinnitati hiljem konto loopback-IP-l.
+
+Paranduse kontroll: Node.js 24.22.1-ga 8 sihitud HTTP-regressiooni ja kohaliku
+MariaDB 11.4.13 sünteetilises keskkonnas 9 paigalduse/taastamise regressiooni:
+17 läbitud, 0 ebaõnnestunud, 0 vahele jäetud. Kontrollitud on teenus, mis kuulab
+ainult aadressil 127.0.135.83, vaikimisi 127.0.0.1 ühilduvus, valed SHA-d,
+autentimiskaitsed, ümbersuunamiste ja väliste sihtkohtade tõkestamine ning
+proxy-keskkonnamuutujatest sõltumatus. Kogu varasemat 39 testi komplekti ei
+korratud. Zone.ee serverisse ei ühendutud ega seal faile, protsesse või andmeid
+muudetud.
