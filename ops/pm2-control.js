@@ -15,10 +15,11 @@ try{
  // start changes the path only after stop; status/stop must refer to the exact live release.
  if(action!=='start'&&fs.realpathSync(env.pm_exec_path)!==fs.realpathSync(path.join(release,'server/index.js')))throw Error('PM2 protsessi tee ei vasta kontrollitud väljalaskele.');
  if(action==='status')process.exitCode=env.status==='online'?0:['stopped','errored'].includes(env.status)?3:1;
- else if(action==='stop')pm2(['stop',String(app.pm_id)]);
+ else if(action==='stop'){pm2(['stop',String(app.pm_id)]);pm2(['save','--force']);}
  else if(action==='start'){
   if(app&&!['stopped','errored'].includes(env.status))throw Error('Enne käivitamist peab vana protsess olema peatatud.');
   if(app)pm2(['delete',String(app.pm_id)]);
   pm2(['start',path.join(release,'server/index.js'),'--name',name,'--cwd',release,'--interpreter',process.execPath,'--time']);
+  pm2(['save','--force']);
  }else throw Error('Tundmatu protsessitoiming.');
 }catch(e){console.error(e.message);process.exitCode=1;}

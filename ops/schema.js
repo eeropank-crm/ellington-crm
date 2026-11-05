@@ -36,6 +36,8 @@ async function inspect(db) {
     .select('TABLE_NAME','INDEX_NAME','NON_UNIQUE','SEQ_IN_INDEX','COLUMN_NAME','SUB_PART');
   const tables = await db('information_schema.tables').where({TABLE_SCHEMA:schema}).orderBy('TABLE_NAME').select('TABLE_NAME','TABLE_TYPE','ENGINE','TABLE_COLLATION');
   const triggers = await db('information_schema.triggers').where({TRIGGER_SCHEMA:schema}).select('EVENT_OBJECT_TABLE');
+  const schemaInfo=await db('information_schema.schemata').where({SCHEMA_NAME:schema}).first('DEFAULT_CHARACTER_SET_NAME');
+  const checks=await db('information_schema.table_constraints as t').join('information_schema.check_constraints as c',function(){this.on('c.CONSTRAINT_SCHEMA','t.CONSTRAINT_SCHEMA').andOn('c.CONSTRAINT_NAME','t.CONSTRAINT_NAME');}).where('t.TABLE_SCHEMA',schema).where('t.CONSTRAINT_TYPE','CHECK').orderBy('t.TABLE_NAME').orderBy('t.CONSTRAINT_NAME').select('t.TABLE_NAME','c.CHECK_CLAUSE');
   const events = await db('information_schema.events').where({EVENT_SCHEMA:schema}).select('EVENT_NAME');
   const foreign = await db('information_schema.key_column_usage').where({TABLE_SCHEMA:schema}).whereNotNull('REFERENCED_TABLE_NAME').select('TABLE_NAME','COLUMN_NAME');
   let applied = [];
@@ -43,23 +45,28 @@ async function inspect(db) {
   let locked = false;
   if (tables.some(t=>t.TABLE_NAME==='knex_migrations_lock')) locked=(await db('knex_migrations_lock').select('is_locked')).some(x=>Number(x.is_locked)!==0);
   const [[version]] = await db.raw('SELECT VERSION() AS version');
-  return {version:version.version, tables, columns, indexes, triggers, events, foreign, applied, locked};
+  return {version:version.version, tables, columns, indexes, triggers, checks, events, foreign, applied, locked, charset:schemaInfo?.DEFAULT_CHARACTER_SET_NAME};
 }
 function fingerprint(snapshot) {
-  return sha(JSON.stringify({tables:snapshot.tables, columns:snapshot.columns, indexes:snapshot.indexes, triggers:snapshot.triggers, events:snapshot.events, foreign:snapshot.foreign, applied:snapshot.applied}));
+  return sha(JSON.stringify({tables:snapshot.tables, columns:snapshot.columns, indexes:snapshot.indexes, triggers:snapshot.triggers, checks:snapshot.checks, charset:snapshot.charset, events:snapshot.events, foreign:snapshot.foreign, applied:snapshot.applied}));
 }
 function validate(snapshot, final = false) {
   const errors = [];
   const expected = groups(contract.columns), actual = groups(snapshot.columns);
+  if(!actual.users||!actual.user_sessions)errors.push('Senine autentimisskeem puudub; kontrolli, et valitud on õige olemasolev andmebaas.');
   const pending = migrations.filter(m=>!snapshot.applied.includes(m));
   const migrationFiles=fs.readdirSync(path.join(__dirname,'../database/migrations')).filter(f=>f.endsWith('.js')).sort();
   if (JSON.stringify(migrationFiles)!==JSON.stringify(migrations)) errors.push('Migratsioonide loend ei vasta kontrollitud skeemile.');
   if (snapshot.applied.some((name,i)=>name!==migrations[i])) errors.push('Tundmatu või vales järjekorras migratsiooniajalugu.');
+  if(snapshot.charset!=='utf8mb4') errors.push('Andmebaasi vaikimisi märgistik peab olema utf8mb4.');
   if (snapshot.locked) errors.push('Knexi migratsioonilukk on aktiivne.');
   const tracker=snapshot.tables.filter(t=>['knex_migrations','knex_migrations_lock'].includes(t.TABLE_NAME));
   if (tracker.length===1) errors.push('Poolik Knexi migratsioonide haldusskeem.');
   if (!/^(?:8\.|9\.)/.test(snapshot.version) && !/^(?:10\.(?:[6-9]|[1-9]\d)|1[1-9]\.)[^ ]*MariaDB/i.test(snapshot.version)) errors.push('Nõutud on MySQL 8+ või MariaDB 10.6+.');
+  for(const check of snapshot.checks)if(expected[check.TABLE_NAME]&&!(check.TABLE_NAME==='user_sessions'&&/^\(*json_valid\(sess\)\)*$/.test(check.CHECK_CLAUSE.toLowerCase().replace(/[`\s]/g,''))))errors.push(check.TABLE_NAME+': tundmatu CHECK-piirang vajab ülevaatust.');
+  for(const fk of snapshot.foreign)if(expected[fk.TABLE_NAME])errors.push(fk.TABLE_NAME+': täiendav välisvõti vajab eraldi skeemiülevaatust.');
   for (const t of snapshot.tables) {
+    if(expected[t.TABLE_NAME]&&!t.TABLE_COLLATION?.startsWith('utf8mb4_'))errors.push(t.TABLE_NAME+': tabeli vaikimisi märgistik peab olema utf8mb4.');
     if (t.TABLE_TYPE!=='BASE TABLE' || t.ENGINE!=='InnoDB') errors.push(t.TABLE_NAME+': varunduseks on nõutud InnoDB baastabel (vaated vajavad eraldi ülevaatust).');
   }
   if(snapshot.events.length) errors.push('Andmebaasis on ajastatud sündmused; nende mõju vajab eraldi ülevaatust.');

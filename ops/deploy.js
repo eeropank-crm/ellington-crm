@@ -66,7 +66,7 @@ function start(options,dir,config,revision){if(control(options,'start',dir,confi
 function stop(options,dir,config){
  const status=control(options,'status',dir,config);
  if(status!==0&&status!==3)throw Error('Rakenduse olekut ei saanud turvaliselt kinnitada.');
- if(status===0&&control(options,'stop',dir,config)!==0)throw Error('Rakenduse peatamine ebaõnnestus.');
+ if(control(options,'stop',dir,config)!==0)throw Error('Rakenduse peatamine ebaõnnestus.');
  if(control(options,'status',dir,config)!==3)throw Error('Rakendus ei ole kinnitatult peatatud.');
 }
 async function smoke(config,revision){
