@@ -3,6 +3,7 @@ const fs=require('node:fs');
 const path=require('node:path');
 const {spawnSync}=require('node:child_process');
 const knex=require('knex');
+const sqlMode=require('./sql-mode');
 const {sha}=require('./schema');
 function settings(file, expectedHost, expectedDatabase) {
   const envPath=fs.realpathSync(file);
@@ -17,7 +18,7 @@ function settings(file, expectedHost, expectedDatabase) {
   if(!Number.isInteger(port)||port<1||port>65535)throw Error('Vigane andmebaasiport.');
   return {envPath,env,hash:sha(content),connection:{host:env.DB_HOST,port,user:env.DB_USER,password:env.DB_PASSWORD,database:env.DB_NAME,charset:'utf8mb4'}};
 }
-const connect=config=>knex({client:'mysql2',connection:config.connection,pool:{min:0,max:2},acquireConnectionTimeout:15000});
+const connect=config=>sqlMode.restoreOnDestroy(knex({client:'mysql2',connection:config.connection,pool:{min:0,max:2,afterCreate:sqlMode.afterCreate},acquireConnectionTimeout:15000}));
 function clientOptions(config, dir) {
   const quote=x=>'"'+String(x).replace(/\\/g,'\\\\').replace(/"/g,'\\"').replace(/\n/g,'\\n').replace(/\r/g,'\\r')+'"';
   const file=path.join(dir,'.mysql-options');
