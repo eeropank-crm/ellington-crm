@@ -65,10 +65,33 @@ seadistuseta; eelarveauditit, kirjade ja vastuste lugemispäringuid, administraa
 
 ## Piirid
 
-Brauseri visuaalset kontrolli ei tehtud; HTML-lehtede ligipääsu kontrolliti HTTP-ga
-ja töövooge API ning päris MariaDB kaudu. SMTP saatmist ja IMAP ühendust ei
+Esialgses kontrollis testiti HTML-lehtede ligipääsu HTTP-ga ja töövooge API ning päris MariaDB kaudu. Hilisem visuaalne kontroll on kirjeldatud allpool. SMTP saatmist ja IMAP ühendust ei
 käivitatud; tegelikku postivahetust ei valideeritud. Zone.ee tootmisserveri ega
 pärisandmebaasiga ei ühendutud. Ionprinti järjekorra kirjed ei käivita ühendust.
 Migratsioonide tagasipööramine nõuab varukoopiat, sest MySQL DDL ei ole
 tehinguline. Suvalise eelnevalt loodud vigase v8 tabeli veerud vajavad eraldi
 skeemivõrdlust; tuvastatud baasskeemi puudused on kaetud.
+
+
+## Visuaalne järelkontroll 05.11.2026
+
+Avasin kohaliku rakenduse Chromiumis (1440 × 1050), logisin sisse sünteetilise
+müügikasutajana, otsisin sünteetilise ettevõtte ja avasin kliendikaardi.
+Kontrollisin kõigi kolme tüübi planeerimisvormi, valisin sünteetilise eesmärgimalli
+ning avasin tegevuse töövormi. Selle käigus loodi kohalikke sünteetilisi tegevusi;
+neid ei lõpetatud ega saadetud.
+
+- Kõne: juhis, tulemuse kommentaar, „Tehtud” ja „Lükka tegevus edasi” kuvatakse korrektselt.
+- Kohtumine: juhis, tulemuse valik („Toimus” / „Jäi ära”), kommentaar ja tegevusnupud kuvatakse korrektselt.
+- E-kiri: kontakt, saaja, eesmärk, pealkiri, sisu ning saatmise ja hilisema planeerimise nupud kuvatakse korrektselt; mall täidab pealkirja ja sisu.
+- Vormide väljad ja nupud on loetavad ning ei kattu kontrollitud töölauavaates.
+- Brauseri JavaScripti vigu ei registreeritud.
+
+E-kirja koostamisvormi avamiseks kasutati ainult eraldi kontrolliprotsessis
+sünteetilist postkastiseadistust (`example.invalid`, loopback SMTP suletud port).
+`.env` faili ei muudetud. Kõik välised brauseripäringud ning saatmise ja IMAP
+sünkroniseerimise API-päringud olid blokeeritud. „Saada kiri” nuppu ei vajutatud.
+Mobiilivaadet ega tegelikku postivahetust selles kontrollis ei testitud.
+
+Ekraanipildid: [kõne](visual/call-form.png), [kohtumine](visual/meeting-form.png),
+[e-kiri](visual/email-form.png).
