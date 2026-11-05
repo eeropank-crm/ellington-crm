@@ -32,8 +32,10 @@ Fail sisaldab ainult SELECT-päringuid. See väljastab serveriversiooni,
 ühenduse SQL-režiimi ja 27 loendurit: 19 negatiivsete arvude, 4 NULL-ajatemplite
 ja 4 nullkuupäevade loendurit. Seal pole kliendi-, tegevuse-, e-posti- ega
 kasutajakirjete sisu või ID-de loendit, paroole ega ühenduse identiteeti.
-Kõik 27 loendurit peavad olema **0**. Ühendusel peab olema
-`STRICT_TRANS_TABLES` või `STRICT_ALL_TABLES`.
+Kõik 27 loendurit peavad olema **0**. Serveri algne ühendusrežiim võib olla
+mitte-range: paigaldaja lisab oma ühendustes vajaliku range lipu ja taastab algse
+režiimi sulgemisel. Globaalset režiimi ei muudeta. Vaata [SQL-režiimi paranduse
+aruanne](sql-mode-safety.md).
 
 Mitte-null tulemust ei käsitleta automaatselt vigase andmena: tegu võib olla
 pärandsüsteemi tähendusliku väärtusega. Seda ei asendata nulli, tänase kuupäeva
@@ -179,7 +181,7 @@ privaatset `manifest.json` faili ja taasta vajadusel kontrollitud SQL-varukoopia
 otsust, mitte automaatset backfill'i. Kahe hoolduskatse vahel tehtud kirjutused
 vajavad eraldi ülevaatust.
 
-## Testitulemused
+## Esialgsed üleminekutestid (enne SQL-režiimi täpsustust)
 
 MariaDB **11.4.13**, Node.js 24.22.1; ainult isoleeritud kohalikud andmebaasid ning
 sünteetilised `example.invalid` kontod ja sõnumid. Kogu komplekt: **34 läbitud,

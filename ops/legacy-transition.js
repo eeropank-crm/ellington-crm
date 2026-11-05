@@ -2,6 +2,7 @@
 const contract=require('./schema-contract.json');
 const profile=require('./legacy-v8-profile.json');
 const {describe,type}=require('./schema-values');
+const sqlMode=require('./sql-mode');
 const migration='004_legacy_v8_transition.js';
 const own002=new Set(['users.name','crm_templates.subject']);
 const key=c=>(c.table||c.TABLE_NAME)+'.'+(c.column||c.COLUMN_NAME);
@@ -35,10 +36,10 @@ function checksFor(changes){
 }
 async function assess(db,snapshot){
  const {changes}=project(snapshot),checks=checksFor(changes),errors=[];
+ const mode=await sqlMode.withConnection(db,async(connection,state)=>({original:state.original,effective:state.effective,scope:'SESSION',globalChanged:false}));
  if(changes.length){
   if(!/^11\.4\.13-MariaDB/i.test(snapshot.version))errors.push('Pärandskeemi üleminek on kontrollitud ainult MariaDB 11.4.13 jaoks.');
-  const [[mode]]=await db.raw('SELECT @@SESSION.sql_mode AS sql_mode');
-  if(!/(?:^|,)STRICT_(?:TRANS_TABLES|ALL_TABLES)(?:,|$)/.test(mode.sql_mode))errors.push('Üleminek nõuab ranget SQL-režiimi.');
+  if(!sqlMode.hasStrict(mode.effective))errors.push('Üleminek nõuab ranget SQL-režiimi.');
  }
  for(const table of [...new Set(checks.map(c=>c.table))]){
   const group=checks.filter(c=>c.table===table);
@@ -48,7 +49,7 @@ async function assess(db,snapshot){
  }
  // Require evidence tied to this exact metadata snapshot; no CLI bypass flag exists.
  const {fingerprint}=require('./schema');
- return {ok:errors.length===0,snapshotHash:fingerprint(snapshot),serverVersion:snapshot.version,changes,checks,errors};
+ return {ok:errors.length===0,snapshotHash:fingerprint(snapshot),serverVersion:snapshot.version,sqlMode:mode,changes,checks,errors};
 }
 function definition(target,current){
  const parts=[target.COLUMN_TYPE];
@@ -85,18 +86,12 @@ async function perform(db){
   const current=await db('information_schema.columns').where({TABLE_SCHEMA:db.client.config.connection.database,TABLE_NAME:change.table,COLUMN_NAME:change.column}).first();
   if(!same(describe(current),change.source))throw Error('Veerg muutus ülemineku ajal: '+key(change));
   const target=contract.columns.find(c=>key(c)===key(change));
-  const connection=await db.client.acquireConnection();
-  let originalMode;
   try{
-   const [[mode]]=await db.raw('SELECT @@SESSION.sql_mode AS sql_mode').connection(connection);
-   if(!/(?:^|,)STRICT_(?:TRANS_TABLES|ALL_TABLES)(?:,|$)/.test(mode.sql_mode))throw Error('Strict mode required');
-   originalMode=mode.sql_mode;
-   const ddlMode=[...new Set([...originalMode.split(','),'NO_BACKSLASH_ESCAPES','NO_AUTO_VALUE_ON_ZERO'])].join(',');
-   await db.raw('SET SESSION sql_mode = ?',[ddlMode]).connection(connection);
-   const result=await db.raw('ALTER TABLE ?? MODIFY COLUMN ?? '+definition(target,current),[change.table,change.column]).connection(connection);
-   if(result[0]?.warningStatus)throw Error('DDL warning');
+   await sqlMode.withConnection(db,async connection=>{
+    const result=await db.raw('ALTER TABLE ?? MODIFY COLUMN ?? '+definition(target,current),[change.table,change.column]).connection(connection);
+    if(result[0]?.warningStatus)throw Error('DDL warning');
+   },['NO_BACKSLASH_ESCAPES','NO_AUTO_VALUE_ON_ZERO']);
   }catch{throw Error('Ülemineku DDL ebaõnnestus: '+key(change)+'; SQL ja privaatsed metaandmed on peidetud.');}
-  finally{try{if(originalMode!==undefined)await db.raw('SET SESSION sql_mode = ?',[originalMode]).connection(connection);}finally{await db.client.releaseConnection(connection);}}
  }
  for(const [table,next]of Object.entries(auto)){
   const row=await db('information_schema.tables').where({TABLE_SCHEMA:db.client.config.connection.database,TABLE_NAME:table}).select(db.raw('CAST(AUTO_INCREMENT AS CHAR) AS next_value')).first();
