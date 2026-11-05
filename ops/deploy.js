@@ -39,21 +39,22 @@ function inventory(revision){
  if(missing.length)throw Error('Väljalaskest puuduvad failid: '+missing.join(', '));
  return {revision:head,trackedFiles:files.size,requiredFiles:required.length};
 }
+function syncPath(file){const fd=fs.openSync(file,'r');try{fs.fsyncSync(fd);}finally{fs.closeSync(fd);}}
 function privateDir(dir){
- if(!fs.existsSync(dir))fs.mkdirSync(dir,{recursive:true,mode:0o700});
+ if(!fs.existsSync(dir)){fs.mkdirSync(dir,{recursive:true,mode:0o700});syncPath(dir);syncPath(path.dirname(dir));}
  const st=fs.lstatSync(dir);
  if(!st.isDirectory()||st.isSymbolicLink()||(st.mode&0o077)||(process.getuid&&st.uid!==process.getuid()))throw Error('Paigaldus- ja varukoopiakaust peab kuuluma käivitajale ning olema 700: '+dir);
  return fs.realpathSync(dir);
 }
 function writeJSON(file,value){
  const tmp=file+'.tmp';fs.writeFileSync(tmp,JSON.stringify(value,null,2)+'\n',{mode:0o600});
- const fd=fs.openSync(tmp,'r');try{fs.fsyncSync(fd);}finally{fs.closeSync(fd);}fs.renameSync(tmp,file);
+ const fd=fs.openSync(tmp,'r');try{fs.fsyncSync(fd);}finally{fs.closeSync(fd);}fs.renameSync(tmp,file);syncPath(path.dirname(file));
 }
 function fileHash(file){const h=crypto.createHash('sha256');const fd=fs.openSync(file,'r'),buffer=Buffer.alloc(1024*1024);try{let n;while((n=fs.readSync(fd,buffer,0,buffer.length,null)))h.update(buffer.subarray(0,n));}finally{fs.closeSync(fd);}return h.digest('hex');}
 function checkPlan(snapshot,final=false){const plan=validate(snapshot,final);if(!plan.ok)throw Error('Skeemi eelkontroll peatas töö: '+plan.errors.join(' '));return plan;}
 function unchangedEnv(config){if(fileHash(config.envPath)!==config.hash)throw Error('.env muutus paigalduse ajal; töö peatatud.');}
 function current(root){const link=path.join(root,'current');if(!fs.lstatSync(link).isSymbolicLink())throw Error('root/current peab olema sümbollink olemasolevale rakendusele.');return fs.realpathSync(link);}
-function switchTo(root,dir){const tmp=path.join(root,'.current-'+crypto.randomBytes(4).toString('hex'));fs.symlinkSync(dir,tmp);fs.renameSync(tmp,path.join(root,'current'));}
+function switchTo(root,dir){const tmp=path.join(root,'.current-'+crypto.randomBytes(4).toString('hex'));fs.symlinkSync(dir,tmp);fs.renameSync(tmp,path.join(root,'current'));syncPath(root);}
 function control(options,action,release,config,revision){
  if(!options.control||!path.isAbsolute(options.control))throw Error('Nõutud on absoluutne --control Node.js fail.');
  const env={...process.env};for(const key of Object.keys(env))if(/^(DB_|CRM_|SESSION_)/.test(key))delete env[key];
@@ -131,7 +132,7 @@ async function apply(options,config,db,root){
   const sql=path.join(dir,'database.sql'),fd=fs.openSync(sql,'r'),size=fs.statSync(sql).size,tail=Buffer.alloc(Math.min(8192,size));
   try{fs.readSync(fd,tail,0,tail.length,size-tail.length);}finally{fs.closeSync(fd);}
   if(!tail.toString().includes('-- Dump completed on'))throw Error('SQL varukoopial puudub lõpetamise märge.');
-  manifest.checksums={};for(const name of ['code.tar.gz','database.sql','env.snapshot'])manifest.checksums[name]=fileHash(path.join(dir,name));
+  manifest.checksums={};for(const name of ['code.tar.gz','database.sql','env.snapshot']){syncPath(path.join(dir,name));manifest.checksums[name]=fileHash(path.join(dir,name));}
   manifest.backupComplete=true;manifest.phase='backed-up';save();verifyBackup(dir,manifest);
   privateDir(release);
   const archive=path.join(dir,'release.tar');run('git',['archive','--format=tar','--output='+archive,options.revision]);run('tar',['-xf',archive,'-C',release]);fs.unlinkSync(archive);
