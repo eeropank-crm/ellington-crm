@@ -65,7 +65,9 @@ function definition(target,current){
  }
  if(target.EXTRA==='auto_increment')parts.push('AUTO_INCREMENT');
  else if(target.EXTRA)throw Error('Ülemineku automaatreegel vajab eraldi ülevaatust.');
- parts.push('COMMENT ?');return parts.join(' ');
+ if(typeof current.COLUMN_COMMENT!=='string'||current.COLUMN_COMMENT.includes('\0'))throw Error('Veerukommentaari kodeering vajab ülevaatust.');
+ // DDL runs with NO_BACKSLASH_ESCAPES: SQL quote doubling preserves literal bytes.
+ parts.push("COMMENT '"+current.COLUMN_COMMENT.replace(/'/g,"''")+"'");return parts.join(' ');
 }
 async function perform(db){
  const schema=require('./schema'),audit=require('./data-audit');
@@ -84,13 +86,17 @@ async function perform(db){
   if(!same(describe(current),change.source))throw Error('Veerg muutus ülemineku ajal: '+key(change));
   const target=contract.columns.find(c=>key(c)===key(change));
   const connection=await db.client.acquireConnection();
+  let originalMode;
   try{
    const [[mode]]=await db.raw('SELECT @@SESSION.sql_mode AS sql_mode').connection(connection);
    if(!/(?:^|,)STRICT_(?:TRANS_TABLES|ALL_TABLES)(?:,|$)/.test(mode.sql_mode))throw Error('Strict mode required');
-   const result=await db.raw('ALTER TABLE ?? MODIFY COLUMN ?? '+definition(target,current),[change.table,change.column,current.COLUMN_COMMENT]).connection(connection);
+   originalMode=mode.sql_mode;
+   const ddlMode=[...new Set([...originalMode.split(','),'NO_BACKSLASH_ESCAPES','NO_AUTO_VALUE_ON_ZERO'])].join(',');
+   await db.raw('SET SESSION sql_mode = ?',[ddlMode]).connection(connection);
+   const result=await db.raw('ALTER TABLE ?? MODIFY COLUMN ?? '+definition(target,current),[change.table,change.column]).connection(connection);
    if(result[0]?.warningStatus)throw Error('DDL warning');
   }catch{throw Error('Ülemineku DDL ebaõnnestus: '+key(change)+'; SQL ja privaatsed metaandmed on peidetud.');}
-  finally{await db.client.releaseConnection(connection);}
+  finally{try{if(originalMode!==undefined)await db.raw('SET SESSION sql_mode = ?',[originalMode]).connection(connection);}finally{await db.client.releaseConnection(connection);}}
  }
  for(const [table,next]of Object.entries(auto)){
   const row=await db('information_schema.tables').where({TABLE_SCHEMA:db.client.config.connection.database,TABLE_NAME:table}).select(db.raw('CAST(AUTO_INCREMENT AS CHAR) AS next_value')).first();

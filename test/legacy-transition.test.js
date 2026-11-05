@@ -7,6 +7,7 @@ const transition=require('../ops/legacy-transition');const audit=require('../ops
 const database=require('../ops/database');const profile=require('../ops/legacy-v8-profile.json');
 const {describe}=require('../ops/schema-values');
 const enabled=!!process.env.DEPLOY_TEST_ENV;let db,initial,fixture,activity;
+const privateComment="synthetic private ' quote \\ and õ\nline";
 const source=path.resolve(__dirname,'..');
 async function rawSource(){
  const snapshot=await inspect(db);for(const t of snapshot.tables)await db.schema.dropTable(t.TABLE_NAME);
@@ -26,7 +27,7 @@ async function rawSource(){
   const name=rows.find(i=>i.COLUMN_NAME===lookup.columns[0]).INDEX_NAME;
   await db.schema.alterTable(lookup.table,t=>t.dropIndex([],name));
  }
- await db.raw("ALTER TABLE crm_clients MODIFY COLUMN client_type varchar(20) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL DEFAULT 'SYN1' COMMENT 'synthetic private comment'");
+ await db.raw("ALTER TABLE crm_clients MODIFY COLUMN client_type varchar(20) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL DEFAULT 'SYN1' COMMENT ?",[privateComment]);
 }
 before(async()=>{
  if(!enabled)return;
@@ -40,6 +41,10 @@ before(async()=>{
  const long='synthetic õ'.repeat(9000);
  await db('crm_activity_details').insert({activity_id:activity,template_id:fixture.templates.Kõne,purpose:'Test Kõne',instructions:long,next_step_json:JSON.stringify({body:long})});
  await db('crm_v8_activity_events').insert({id:4294967295,activity_id:activity,user_id:fixture.sales,event_type:'completed',details:JSON.stringify({comment:long}),created_at:'2001-01-02 03:04:05'});
+ const connection=await db.client.acquireConnection();const [[sqlMode]]=await db.raw('SELECT @@SESSION.sql_mode AS mode').connection(connection);
+ try{await db.raw('SET SESSION sql_mode = ?',[sqlMode.mode+',NO_AUTO_VALUE_ON_ZERO']).connection(connection);await db('crm_v8_activity_events').insert({id:0,activity_id:activity,user_id:fixture.sales,event_type:'zero_id_preservation',details:'preserve zero PK',created_at:'2001-01-02 03:04:05'}).connection(connection);}
+ finally{await db.raw('SET SESSION sql_mode = ?',[sqlMode.mode]).connection(connection);await db.client.releaseConnection(connection);}
+
  await db('crm_budget_change_log').insert({client_id:'9223372036854775807',user_id:fixture.sales,year:2026,before_annual:12.34,after_annual:56.78,reason:'Preserve budget audit',created_at:'2001-01-02 03:04:05'});
  const [transfer]=await db('crm_portfolio_transfers').insert({from_user_id:fixture.sales,to_user_id:fixture.admin,performed_by:fixture.admin,client_count:1,activity_count:1,created_at:'2001-01-02 03:04:05'});
  await db('crm_portfolio_transfer_items').insert({transfer_id:transfer,client_id:fixture.client,client_name:'Synthetic old owner history'});
@@ -97,7 +102,7 @@ test('all forward migrations preserve exact original records, large texts, comme
  const after=await inspect(db);assert.equal(validate(after,true).ok,true);
  await audit.verify(db,after,evidence);
  const column=await db('information_schema.columns').where({TABLE_SCHEMA:db.client.config.connection.database,TABLE_NAME:'crm_clients',COLUMN_NAME:'client_type'}).first();
- assert.equal(column.COLLATION_NAME,'utf8mb4_bin');assert.equal(column.COLUMN_COMMENT,'synthetic private comment');
+ assert.equal(column.COLLATION_NAME,'utf8mb4_bin');assert.equal(column.COLUMN_COMMENT,privateComment);
  const next=await db('information_schema.tables').where({TABLE_SCHEMA:db.client.config.connection.database,TABLE_NAME:'crm_v8_activity_events'}).select(db.raw('CAST(AUTO_INCREMENT AS CHAR) AS next_value')).first();assert.ok(BigInt(next.next_value)>=BigInt(auto.next_value));
  for(const item of profile.columns.filter(c=>/^(longtext|mediumtext)$/.test(c.actual.type))){assert.equal(after.columns.find(c=>c.TABLE_NAME===item.table&&c.COLUMN_NAME===item.column).COLUMN_TYPE,item.actual.type);}
  const final=fingerprint(after);await transition.perform(db);assert.equal(fingerprint(await inspect(db)),final);await audit.verify(db,await inspect(db),evidence);
