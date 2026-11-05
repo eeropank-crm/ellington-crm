@@ -1,0 +1,671 @@
+<!doctype html><html lang="et"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Ellington Sales CRM</title><style>
+:root{font-family:Inter,system-ui,Arial,sans-serif;color:#17243b;background:#f5f7fb}*{box-sizing:border-box}body{margin:0}.wrap{max-width:1100px;margin:auto;padding:24px}header,.bar,.flex{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}h1{font-size:25px;margin:0}h2{font-size:20px}h3{font-size:17px;margin:0 0 10px}.muted{color:#66758c;font-size:13px}.nav{display:flex;gap:8px;margin:22px 0}.btn,button,select,input,textarea{font:inherit}button{cursor:pointer;border:1px solid #cdd6e3;border-radius:9px;padding:10px 13px;background:white;color:#1a2d4a}button.primary,.nav button.active{background:#1f4d93;border-color:#1f4d93;color:white}button:disabled{opacity:.5;cursor:not-allowed}.cards{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}.card,.panel{border:1px solid #dce3ec;background:#fff;border-radius:12px;padding:17px}.card{cursor:pointer;text-align:left}.card.active{border-color:#1f4d93;background:#eaf1fc}.card strong{font-size:29px;display:block;margin:6px 0}.stack{display:grid;gap:12px;margin-top:17px}.panel{padding:18px}.taskhead{display:flex;justify-content:space-between;gap:12px;align-items:center}.sub{margin-top:6px;color:#56657a}.form{display:grid;gap:10px;margin-top:16px;background:#f4f7fc;border-radius:10px;padding:16px}.form label{font-weight:600;font-size:13px}input,select,textarea{width:100%;border:1px solid #c9d3e1;border-radius:8px;padding:10px;background:white}textarea{min-height:105px;resize:vertical}.row{display:grid;grid-template-columns:1fr 1fr;gap:12px}.choices{display:flex;gap:8px;flex-wrap:wrap}.choices button.selected{background:#dce9fb;border-color:#1f4d93}.good{color:#147348}.bad{color:#b63838}.notice{padding:12px;background:#e9f6ef;border-radius:9px;margin-top:15px}.metrics{display:grid;grid-template-columns:1fr 1fr;gap:12px}.metric{background:#f2f5fa;border-radius:10px;padding:16px}.metric b{display:block;font-size:23px;margin-top:7px}.divider{border-top:1px solid #e0e5ed;margin:16px 0}.small{font-size:13px}.hide{display:none}@media(max-width:650px){.wrap{padding:14px}.cards{gap:6px}.card{padding:11px}.card strong{font-size:24px}.row,.metrics{grid-template-columns:1fr}.taskhead{align-items:flex-start;flex-direction:column}}
+table th,table td{padding:9px;border-bottom:1px solid #e0e5ed;font-size:13px} .metric[onclick]{cursor:pointer;border:1px solid #cdd6e3}</style></head><body><div class="wrap"><header><div><h1>Ellington Sales CRM</h1><div class="muted">Veebiprototüüp · näidisandmed · uuendatud 03.11.2026</div></div><div><label class="small" for="user">Kasutaja</label><select id="user"></select></div></header><nav class="nav" id="nav"></nav><main id="app"></main></div><script>let v8Reasons=[];
+
+const MALL_TYPES=['Kõne','E-kiri','Kohtumine'],TODAY='2026-10-26',TYPES=['E-kiri','Kõne','Kohtumine'];const initial={templates:[{id:'intro',name:'Ettevõtte tutvustus',type:'E-kiri',subject:'Ellingtoni tutvustus',body:'Tere!\n\nSoovin tutvustada Ellingtoni trüki- ja kampaaniamaterjalide lahendusi.\n\nKas leiaksime sobiva aja teie vajaduste arutamiseks?\n\nParimate soovidega\nEllington',next:'Kõne',days:5},{id:'offer',name:'Pakkumise järelkiri',type:'E-kiri',subject:'Tagasiside pakkumisele',body:'Tere!\n\nKas olete jõudnud meie pakkumisega tutvuda?\n\nParimate soovidega\nEllington',next:'Kõne',days:7},{id:'call',name:'Esimene kontakt',type:'Kõne',subject:'',body:'Selgita kliendi vajadus ja järgmise ostu võimalik aeg.',next:'E-kiri',days:7},{id:'meeting',name:'Kliendikohtumine',type:'Kohtumine',subject:'',body:'Aruta vajadusi, eelarvet ja võimalikku koostööd.',next:'Kõne',days:5}],tasks:[{id:1,client:'Nordic Print OÜ',owner:'Indrek',person:'Mari Tamm',phone:'+372 5550 1234',email:'mari@example.com',type:'Kõne',num:1,due:TODAY,state:'active',templateId:'call'},{id:2,client:'Baltic Events AS',owner:'Indrek',person:'Jaan Kask',phone:'+372 5550 5678',email:'jaan@example.com',type:'E-kiri',num:3,due:'2026-10-20',state:'active',templateId:'offer'},{id:3,client:'Eventline OÜ',owner:'Palme',person:'Kati Saar',phone:'+372 5550 4321',email:'kati@example.com',type:'E-kiri',num:2,due:TODAY,state:'active',templateId:'intro'},{id:4,client:'PromoPartner AS',owner:'Eero',person:'Liisa Mets',phone:'+372 5550 2345',email:'liisa@example.com',type:'Kohtumine',num:1,due:'2026-10-27',state:'active',templateId:'meeting'},{id:5,client:'R-tähisega näidisklient',owner:'Admin',person:'Kristi Näidis',phone:'+372 5550 1111',email:'kristi@example.com',type:'E-kiri',num:1,due:TODAY,state:'active',templateId:'intro'}],plans:[{client:'Nordic Print OÜ',owner:'Indrek',person:'Mari Tamm',phone:'+372 5550 1234',email:'mari@example.com',annual:120000,quarters:[30000,30000,30000,30000],actual:80000,ackMonth:null},{client:'Eventline OÜ',owner:'Palme',person:'Kati Saar',phone:'+372 5550 4321',email:'kati@example.com',annual:72000,quarters:[18000,18000,18000,18000],actual:42000,ackMonth:null},{client:'PromoPartner AS',owner:'Eero',person:'Liisa Mets',phone:'+372 5550 2345',email:'liisa@example.com',annual:96000,quarters:[24000,24000,24000,24000],actual:58000,ackMonth:null},{client:'R-tähisega näidisklient',owner:'Admin',person:'Kristi Näidis',phone:'+372 5550 1111',email:'kristi@example.com',annual:48000,quarters:[12000,12000,12000,12000],actual:27000,ackMonth:null}],history:[]};let data;try{data=JSON.parse(localStorage.getItem('ellington-crm-demo'))||structuredClone(initial)}catch{data=structuredClone(initial)}let user='Indrek',page='dashboard',tab='activities',active=null,alertClient=null,alertMode='detail',editId=null,notice='';let taskDraft={},planDraft={},templateDraft={};data.stopped ||= {};data.users ||= [{name:'Indrek',role:'sales',active:true},{name:'Palme',role:'sales',active:true},{name:'Eero',role:'admin',active:true}];data.budgetChanges ||= [];data.churnAdjustments ||= [];data.plans.forEach(p=>{if(p.owner==='Admin')p.owner='Eero';if(p.initialAnnual==null)p.initialAnnual=p.annual});data.tasks.forEach(t=>{if(t.owner==='Admin')t.owner='Eero'});let stopId=null,stopReason='',stopOther='';const $=id=>document.getElementById(id),esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])),money=n=>Number(n).toLocaleString('et-EE')+' €',fmt=d=>d.split('-').reverse().join('.'),save=()=>localStorage.setItem('ellington-crm-demo',JSON.stringify(data)),id=()=>Math.max(100,...data.tasks.map(t=>t.id))+1;function addDays(d,n,working=false){let x=new Date(d+'T12:00:00Z'),i=0;while(i<n){x.setUTCDate(x.getUTCDate()+1);if(!working||![0,6].includes(x.getUTCDay()))i++}return x.toISOString().slice(0,10)}const cum=p=>p.quarters.slice(0,3).reduce((a,b)=>a+Number(b),0),warning=p=>p.ackMonth!=='2026-09'&&cum(p)>0&&p.actual<cum(p)*.9;const isAdmin=()=>data.users.some(u=>u.name===user&&u.role==='admin'&&u.active);const owned=x=>isAdmin()||x.owner===user;const mine=()=>data.tasks.filter(t=>t.state==='active'&&owned(t)&&!data.stopped?.[t.client]);const warns=()=>data.plans.filter(p=>owned(p)&&warning(p)&&!data.stopped?.[p.client]);function notify(s){notice=s;render()}function render(){const sel=$('user');sel.innerHTML=data.users.filter(u=>u.active).map(u=>`<option ${u.name===user?'selected':''}>${esc(u.name)}</option>`).join('');if(!data.users.some(u=>u.name===user&&u.active)){user=data.users.find(u=>u.active)?.name||'';sel.value=user}const nav=$('nav');nav.innerHTML=`<button class="${page==='dashboard'?'active':''}" onclick="go('dashboard')">Töölaud</button>${isAdmin()?`<button class="${page==='templates'?'active':''}" onclick="go('templates')">Mallid</button><button class="${page==='users'?'active':''}" onclick="go('users')">Kasutajad</button><button class="${page==='portfolios'?'active':''}" onclick="go('portfolios')">Kliendiportfellid</button><button class="${page==='budget'?'active':''}" onclick="go('budget')">Eelarve</button>`:''}<button class="${page==='clients'?'active':''}" onclick="go('clients')">Kliendid</button>`;const app=$('app');app.innerHTML=(page==='templates'&&isAdmin()?renderTemplates():page==='users'&&isAdmin()?renderUsers():page==='budget'&&isAdmin()?renderAdminSummary():page==='portfolios'&&isAdmin()?renderPortfolios():page==='clients'?renderClients():renderDashboard())+crmWorkflowHTML()+(notice?`<div class="notice">${esc(notice)}</div>`:'');if(page==='budget')v8BudgetRefreshSummary();if(page==='clients'&&crmClientResult){queueMicrotask(()=>v8BudgetPreview(crmSelectedClient).then(()=>{if(v8BudgetDraft?.id===crmSelectedClient)v8BudgetRender();}));}}
+
+let clientSearch = '';
+let clientMatches = [];
+let clientSearchTimer = null;
+
+function clientResultsHTML(clients){
+  return `<div class="stack">${clients.map(client=>`
+    <section class="panel"
+      role="button" tabindex="0"
+      style="cursor:pointer"
+      onclick="openClientById(${Number(client.id)})"
+      onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();openClientById(${Number(client.id)})}">
+      <div class="bar">
+        <b>${esc(client.name)}</b>
+        <span class="muted">›</span>
+      </div>
+    </section>`).join('') ||
+    (clientSearch.trim() ? '<p class="muted">Kliente ei leitud.</p>' : '<p class="muted">Klientide nägemiseks sisesta ettevõtte nimi.</p>')}</div>`;
+}
+
+async function updateClientResults(){
+  clearTimeout(clientSearchTimer);
+
+  const target = $('clientResults');
+  if(!target) return;
+
+  if(!clientSearch.trim()){
+    clientMatches = [];
+    target.innerHTML = clientResultsHTML([]);
+    return;
+  }
+
+  const query = clientSearch.trim();
+
+  clientSearchTimer = setTimeout(async ()=>{
+    try {
+      const response = await fetch(
+        '/api/clients?search=' + encodeURIComponent(query),
+        { credentials: 'same-origin' }
+      );
+
+      if(!response.ok) throw new Error('HTTP ' + response.status);
+
+      const result = await response.json();
+
+      if(query !== clientSearch.trim()) return;
+
+      clientMatches = result.clients || [];
+
+      const current = $('clientResults');
+      if(current) current.innerHTML = clientResultsHTML(clientMatches);
+    } catch(error) {
+      const current = $('clientResults');
+      if(current) current.innerHTML =
+        '<p class="muted">Otsing ei õnnestunud. Proovi uuesti.</p>';
+    }
+  }, 250);
+}
+
+function clientDetailHTML(result){
+  const c = result.client;
+  const contacts = result.contacts || [];
+  const history = result.history || [];
+
+  const field = (label, value) => `
+    <div>
+      <div class="muted">${esc(label)}</div>
+      <div style="white-space:pre-wrap">${esc(value || '—')}</div>
+    </div>`;
+
+  const section = (title, content) => `
+    <section class="panel">
+      <h3>${esc(title)}</h3>
+      ${content}
+    </section>`;
+
+  const contactHTML = contacts.length
+    ? contacts.map(person => `
+        <div style="margin-bottom:16px">
+          <b>${esc(person.name)}</b>
+          ${person.position
+            ? `<div class="muted">${esc(person.position)}</div>`
+            : ''}
+          ${person.email
+            ? `<div>${esc(person.email)}</div>`
+            : ''}
+          ${person.phone
+            ? `<div>${esc(person.phone)}</div>`
+            : ''}
+        </div>`).join('')
+    : '<p class="muted">Kontaktisikuid ei ole lisatud.</p>';
+
+  const completedActivities = result.activityHistory || [];
+  const completedHTML = completedActivities.map(item => `
+    <div style="margin-bottom:16px;border-bottom:1px solid #ddd;padding-bottom:12px">
+      <b>${esc(item.type)}</b> <span class="muted">· ${item.status === 'completed' ? (item.outcome==='cancelled'?'Kohtumine jäi ära':'Tehtud') : (item.completion_event_type==='completed_and_stopped'?'Tehtud; jälgimine lõpetatud':'Tegevus peatatud')}</span>
+      <div class="muted">${esc(item.completed_at ? String(item.completed_at).replace('T',' ').slice(0,19) : 'Aeg teadmata')} · Tegija: ${esc(item.completed_by || 'Teadmata')}</div>
+      ${item.outcome ? `<div><b>Tulemus:</b> ${esc(({done:'Tehtud',cancelled:'Jäi ära',postponed:'Edasi lükatud'})[item.outcome]||item.outcome)}</div>` : ''}
+      ${item.purpose ? `<div><b>Eesmärk:</b> ${esc(item.purpose)}</div>` : ''}
+      <div><b>Algne juhis:</b> <span style="white-space:pre-wrap">${esc(item.instructions || item.notes || '—')}</span></div>
+      <div><b>Tegelik tulemus / kommentaar:</b> <span style="white-space:pre-wrap">${esc(item.result_comment || (item.has_completion_event ? 'Kommentaari ei salvestatud.' : 'Lõpetamise sündmus puudub.'))}</span></div>
+    </div>`).join('');
+
+  const replyHTML=(result.replyHistory||[]).map(r=>`<div class="divider"><b>Kliendi vastus käsitletud</b><div class="muted">${esc(r.created_at||'')} · ${esc(r.actor_name||'')}</div><div>${esc(({reviewed:'Vastus läbi vaadatud',planned:'Uus tegevus planeeritud',completed:'Tegevus lõpetatud',stopped:'Jälgimine lõpetatud'})[r.action]||r.action||'')}</div><p style="white-space:pre-wrap">${esc(r.note||'')}</p></div>`).join('');
+  const historyHTML = completedHTML + replyHTML + (history.length
+    ? history.map(item => `
+        <div style="margin-bottom:12px">
+          <b>${esc(item.activity_type)}</b>
+          <div style="white-space:pre-wrap">
+            ${esc(item.original_value || '—')}
+          </div>
+          <div class="muted">
+            Allika veerg: ${esc(item.source_column)}
+          </div>
+        </div>`).join('')
+    : (completedActivities.length ? '' : '<p class="muted">Varasemaid tegevusi ei ole.</p>'));
+
+  return `
+    <div class="stack">
+      <div>
+        <button onclick="crmBackToClients()">
+          ← Tagasi otsingusse
+        </button>
+      </div>
+
+      ${section('Kliendi andmed', `
+        <h2>${esc(c.name)}</h2>
+        <div class="stack">
+          ${field('Liik', c.client_type)}
+          ${field('Vastutaja', c.owner_name)}
+          ${field('Follow-up’ide arv', String(c.followup_count ?? 0))}
+          ${c.stop_reason ? field('Jälgimise lõpetamise põhjus', c.stop_reason) : ''}
+        </div>
+      `)}
+
+
+      ${section('Eelarve', `<div id="clientBudgetPanel"><button onclick="v8BudgetOpen(${Number(c.id)})">Muuda eelarvet</button></div>`)}
+
+      ${section('Tegevused', crmClientActivities(result))}
+
+      ${section('Kontaktisikud', contactHTML)}
+
+      ${section('Kliendi kommentaar', `
+        <p style="white-space:pre-wrap">
+          ${esc(c.client_comment || 'Kommentaar puudub.')}
+        </p>
+      `)}
+
+      ${section('Meie kommentaar', `
+        <p style="white-space:pre-wrap">
+          ${esc(c.our_comment || 'Kommentaar puudub.')}
+        </p>
+      `)}
+
+      ${section('Varasemad tegevused', historyHTML)}
+    </div>`;
+}
+
+// portfolio-ui-v1
+let portfolioData={users:[],clients:[]};
+let portfolioSelected=new Set();
+let portfolioLoaded=false;
+
+function renderPortfolios(){
+  setTimeout(loadPortfolios,0);
+  return `<h2>Kliendiportfellid</h2>
+    <p class="muted">Administraatori vaade · klientide ja tegevuste üleandmine</p>
+    <div id="portfolioRoot" class="stack">
+      <section class="panel">Laadin portfelle...</section>
+    </div>`;
+}
+
+async function loadPortfolios(){
+  const root=$('portfolioRoot');
+  if(!root)return;
+  try{
+    const response=await fetch('/api/admin/portfolios',{
+      credentials:'same-origin'
+    });
+    const data=await response.json();
+    if(!response.ok)throw Error(data.error||'Laadimine ebaõnnestus.');
+    portfolioData=data;
+    portfolioSelected=new Set();
+    portfolioLoaded=true;
+    drawPortfolios();
+  }catch(e){
+    root.innerHTML=`<section class="panel">${esc(e.message)}</section>`;
+  }
+}
+
+function portfolioOwnerOptions(){
+  return portfolioData.users.map(u=>
+    `<option value="${Number(u.id)}">${esc(u.name)}${u.is_active?'':' (mitteaktiivne)'}</option>`
+  ).join('');
+}
+
+function drawPortfolios(){
+  const root=$('portfolioRoot');
+  if(!root)return;
+  root.innerHTML=`
+    <section class="panel">
+      <h3>Vali portfell ja uus vastutaja</h3>
+      <div class="form">
+        <label>Praegune vastutaja</label>
+        <select id="portfolioFrom" onchange="portfolioChanged()">
+          ${portfolioOwnerOptions()}
+        </select>
+        <label>Uus vastutaja</label>
+        <select id="portfolioTo">
+          ${portfolioOwnerOptions()}
+        </select>
+        <label>Otsi klienti</label>
+        <input id="portfolioSearch" placeholder="Ettevõtte nimi"
+          oninput="drawPortfolioClients()">
+      </div>
+    </section>
+    <section class="panel">
+      <div class="bar">
+        <h3>Kliendid</h3>
+        <span id="portfolioCount" class="muted"></span>
+      </div>
+      <div class="bar">
+        <button id="portfolioSelectAllBtn"
+          type="button"
+          title="Vali kõik / vabasta kõik"
+          aria-label="Vali kõik või vabasta kõik"
+          onclick="portfolioSelectAll()"
+          style="width:24px;height:24px;padding:0;font-size:20px;margin-left:auto;margin-right:0;display:block"
+          >☑</button>
+      </div>
+      <div id="portfolioClients"></div>
+    </section>
+    <section class="panel">
+      <h3>Üleandmine</h3>
+      <p id="portfolioSummary"></p>
+      <p class="muted">
+        Aktiivsed tegevused liiguvad uuele vastutajale.
+        Ionprinti muudatused jäävad ootele.
+      </p>
+      <button class="primary" onclick="transferPortfolio()">
+        Kontrolli ja kinnita üleandmine
+      </button>
+    </section>
+    <section class="panel">
+      <h3>Viimased üleandmised</h3>
+      <div id="portfolioHistory">Laadin...</div>
+    </section>`;
+  const from=$('portfolioFrom');
+  const to=$('portfolioTo');
+  if(from&&to&&portfolioData.users.length>1)
+    to.selectedIndex=1;
+  portfolioChanged();
+  loadPortfolioHistory();
+}
+
+function portfolioChanged(){
+  portfolioSelected.clear();
+  drawPortfolioClients();
+}
+
+function portfolioClientsForOwner(){
+  const id=Number($('portfolioFrom')?.value);
+  return portfolioData.clients.filter(c=>Number(c.owner_user_id)===id);
+}
+
+function drawPortfolioClients(){
+  const container=$('portfolioClients');
+  if(!container)return;
+  const all=portfolioClientsForOwner();
+  const search=($('portfolioSearch')?.value||'').toLocaleLowerCase();
+  const visible=all.filter(c=>c.name.toLocaleLowerCase().includes(search));
+
+  $('portfolioCount').textContent=all.length+' klienti';
+
+  container.innerHTML=visible.map(c=>`
+    <label style="display:grid;grid-template-columns:minmax(0,1fr) 70px 24px;gap:12px;align-items:center;width:100%;box-sizing:border-box;padding:10px 0;cursor:pointer">
+      <span style="min-width:0;overflow-wrap:anywhere">${esc(c.name)}</span>
+      <span class="muted" style="text-align:right">${esc(c.client_type||'')}</span>
+      <input type="checkbox" ${portfolioSelected.has(Number(c.id))?'checked':''}
+        style="width:18px;height:18px;margin:0;justify-self:end"
+        onchange="portfolioToggle(${Number(c.id)},this.checked)">
+    </label>`).join('')||'<p class="muted">Kliente ei leitud.</p>';
+
+  $('portfolioSummary').textContent=
+    'Valitud '+portfolioSelected.size+' klienti '+all.length+' kliendist.';
+}
+
+function portfolioToggle(id,checked){
+  if(checked)portfolioSelected.add(id);
+  else portfolioSelected.delete(id);
+  drawPortfolioClients();
+}
+
+function portfolioSelectAll(){
+  const all=portfolioClientsForOwner();
+  const allSelected=all.length>0 &&
+    all.every(c=>portfolioSelected.has(Number(c.id)));
+
+  if(allSelected){
+    portfolioSelected.clear();
+  }else{
+    all.forEach(c=>portfolioSelected.add(Number(c.id)));
+  }
+  drawPortfolioClients();
+}
+
+async function transferPortfolio(){
+  const from=Number($('portfolioFrom')?.value);
+  const to=Number($('portfolioTo')?.value);
+  const ids=[...portfolioSelected];
+  const users=portfolioData.users;
+  const fromName=users.find(u=>Number(u.id)===from)?.name||'?';
+  const toName=users.find(u=>Number(u.id)===to)?.name||'?';
+
+  if(!ids.length)return alert('Vali vähemalt üks klient.');
+  if(from===to)return alert('Vali teine vastutaja.');
+
+  const message=
+    `Annad ${ids.length} klienti üle:\n`+
+    `${fromName} → ${toName}\n\n`+
+    `Kõik nende aktiivsed tegevused liiguvad samuti üle.\n`+
+    `Ionprinti sünkroonimine jääb ootele.\n\n`+
+    `Kas kinnitad?`;
+
+  if(!confirm(message))return;
+
+  try{
+    const response=await fetch('/api/admin/portfolio-transfer',{
+      method:'POST',
+      credentials:'same-origin',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({
+        from_user_id:from,
+        to_user_id:to,
+        client_ids:ids
+      })
+    });
+    const result=await response.json();
+    if(!response.ok)throw Error(result.error||'Üleandmine ebaõnnestus.');
+
+    alert(
+      `Üle antud ${result.transferred} klienti.\n`+
+      `Ümber määratud ${result.activities} aktiivset tegevust.\n`+
+      `Ionprint: ootab ühendamist.`
+    );
+    await loadPortfolios();
+  }catch(e){
+    alert('Viga: '+e.message);
+  }
+}
+
+async function loadPortfolioHistory(){
+  const target=$('portfolioHistory');
+  if(!target)return;
+  try{
+    const response=await fetch('/api/admin/portfolio-history',{
+      credentials:'same-origin'
+    });
+    const result=await response.json();
+    if(!response.ok)throw Error(result.error||'Viga');
+    const names=id=>portfolioData.users.find(u=>Number(u.id)===Number(id))?.name||'#'+id;
+    target.innerHTML=(result.history||[]).map(x=>`
+      <div style="padding:9px 0">
+        <b>${esc(names(x.from_user_id))} → ${esc(names(x.to_user_id))}</b>
+        <div class="muted">
+          ${Number(x.client_count)} klienti ·
+          ${Number(x.activity_count)} tegevust ·
+          ${esc(String(x.created_at||'').slice(0,19))}
+        </div>
+      </div>`).join('')||'<p class="muted">Üleandmisi pole veel tehtud.</p>';
+  }catch(e){
+    target.textContent=e.message;
+  }
+}
+
+function renderWarnings(){const p=data.plans.find(x=>x.client===alertClient);if(!p)return `<div class="stack">${warns().map(x=>`<section class="panel"><div class="bar"><b>${esc(x.client)}</b><b class="bad">${((x.actual/cum(x)-1)*100).toFixed(1)}%</b></div><p class="muted">Vastutaja: ${esc(x.owner)} · plaan kuni 30.09: ${money(cum(x))} · tegelik: ${money(x.actual)}</p><button class="primary" onclick="openWarning('${esc(x.client)}')">Ava käibehoiatus</button></section>`).join('')||''}</div>`;return `<div style="margin-top:18px"><button onclick="alertClient=null;render()">← Tagasi hoiatuste juurde</button><h2>${esc(p.client)}</h2><p class="muted">Vastutaja: ${esc(p.owner)} · arvestus 01.01–30.09.2026</p><div class="metrics"><div class="metric">Kumulatiivne plaan<b>${money(cum(p))}</b></div><div class="metric">Tegelik käive<b>${money(p.actual)}</b></div></div><p class="${warning(p)?'bad':'good'}">${warning(p)?`Kõrvalekalle ${((p.actual/cum(p)-1)*100).toFixed(1)}% – hoiatus aktiivne`:'Käibehoiatust ei ole'}</p><div class="divider"></div><h3>Müügiplaani muutmine</h3><div class="form"><label>Planeerimise viis</label><div class="choices"><button class="${planDraft.mode==='equal'?'selected':''}" onclick="planDraft.mode='equal';render()">Aastaplaan</button><button class="${planDraft.mode==='manual'?'selected':''}" onclick="planDraft.mode='manual';render()">Kvartaliplaan</button></div>${planDraft.mode==='equal'?`<label>Aastane müügiplaan (€)</label><input type="number" min="1" value="${esc(planDraft.annual)}" oninput="planDraft.annual=this.value">`:`<div class="row">${planDraft.quarters.map((q,i)=>`<div><label>Q${i+1} (€)</label><input type="number" min="0" value="${esc(q)}" oninput="planDraft.quarters[${i}]=this.value"></div>`).join('')}</div><p class="muted">Aastaplaan kokku: <b id="quarterTotal">${money(planDraft.quarters.reduce((a,b)=>a+(Number(b)||0),0))}</b></p>`}<button onclick="savePlan()">Salvesta plaan ja arvuta ümber</button></div><div class="divider"></div><h3>Edasine tegevus</h3><div class="stack"><button onclick="ackWarning()">Kõik OK – jätka jälgimist</button><button class="primary" onclick="alertMode='create';render()">Lülita müügitegevusse</button></div>${alertMode==='create'?`<div class="form"><h3>Uus müügitegevus</h3><label>Tegevuse tüüp</label><select onchange="planDraft.taskType=this.value">${TYPES.map(x=>`<option ${planDraft.taskType===x?'selected':''}>${x}</option>`).join('')}</select><label>Tegevuse kuupäev</label><input type="date" value="${esc(planDraft.taskDate)}" onchange="planDraft.taskDate=this.value"><label>Juhis või märkus</label><textarea oninput="planDraft.note=this.value">${esc(planDraft.note)}</textarea><button class="primary" onclick="createWarningTask()">Salvesta müügitegevus</button></div>`:''}</div>`}
+function openWarning(client){const p=data.plans.find(x=>x.client===client);alertClient=client;alertMode='detail';planDraft={annual:String(p.annual),quarters:p.quarters.map(String),mode:p.quarters.every(q=>q===p.quarters[0])?'equal':'manual',taskType:'Kõne',taskDate:TODAY,note:''};notice='';render()}function savePlan(){const p=data.plans.find(x=>x.client===alertClient),q=planDraft.mode==='equal'?Array(4).fill(Number(planDraft.annual)/4):planDraft.quarters.map(Number),annual=q.reduce((a,b)=>a+b,0);if(!(annual>0)||q.some(v=>!Number.isFinite(v)||v<0))return alert('Sisesta korrektne positiivne käibeplaan.');data.history.unshift({client:p.client,date:TODAY,detail:`Müügiplaan muudetud: ${money(p.annual)} → ${money(annual)}`});if(annual<p.annual){const reason=prompt('Eelarve vähendamise põhjendus (kohustuslik):');if(!reason||!reason.trim())return alert('Vähendamine tühistatud: põhjendus on kohustuslik.');data.budgetChanges.push({client:p.client,actor:user,owner:p.owner,date:new Date().toISOString().slice(0,10),before:p.annual,after:annual,reason:reason.trim()});}else if(annual>p.annual){data.budgetChanges.push({client:p.client,actor:user,owner:p.owner,date:new Date().toISOString().slice(0,10),before:p.annual,after:annual,reason:''});}p.annual=annual;p.quarters=q;p.ackMonth=null;save();notify('Müügiplaan salvestatud. Kumulatiivne seis ja hoiatus on kohe ümber arvutatud.')}function ackWarning(){const p=data.plans.find(x=>x.client===alertClient);p.ackMonth='2026-09';alertClient=null;save();notify('Hoiatus märgitud ülevaadatuks kuni järgmise kuu kontrollini.')}function createWarningTask(){const p=data.plans.find(x=>x.client===alertClient);if(!planDraft.taskDate)return alert('Vali kuupäev.');data.tasks.push({id:id(),client:p.client,owner:p.owner,person:p.person,phone:p.phone,email:p.email,type:planDraft.taskType,num:1,due:planDraft.taskDate,state:'active',templateId:data.templates.find(x=>x.type===planDraft.taskType)?.id||'none',note:planDraft.note});p.ackMonth='2026-09';alertClient=null;tab='activities';save();notify('Müügitegevus salvestatud ja lisatud vastutava müügimehe nimekirja.')}
+function blankTemplate(){editId='new';templateDraft={name:'',type:'E-kiri',purpose:'',subject:'',body:'',next:'Kõne',days:'5',follow:true,chain:[],newPurpose:true,nextNewPurpose:true};render()}function editTemplate(i){const t=data.templates.find(x=>x.id===i);editId=i;templateDraft={...t,type:MALL_TYPES.includes(t.type)?t.type:'Kõne',purpose:t.purpose||t.name||'',follow:!!(t.nextStep||t.next),days:String(t.days||5),chain:structuredClone(t.nextStep?flattenSteps(t.nextStep).slice(1):[]),next:MALL_TYPES.includes(t.nextStep?.type||t.next)?(t.nextStep?.type||t.next):'Kõne',nextPurpose:t.nextStep?.purpose||t.nextStep?.subject||t.nextStep?.body||'Järeltegevus',nextSubject:t.nextStep?.subject||'',nextBody:t.nextStep?.body||'',newPurpose:false,nextNewPurpose:false,days:String(t.nextStep?.days||t.days||5)};render()}function renderTemplatesBase(){return `<div class="bar"><h2>Mallid</h2><button class="primary" onclick="blankTemplate()">+ Loo uus mall</button></div><div class="stack">${data.templates.map(t=>`<section class="panel"><div class="taskhead"><div><b>${esc(t.name)}</b><div class="muted">${esc(t.type)} · Eesmärk: ${esc(t.purpose||t.name)} · ${t.next?`järgmine ${esc(t.next)} ${t.days} tööpäeva pärast`:'järgmine tegevus määramata'}</div>${t.subject?`<div class="sub">${esc(t.subject)}</div>`:''}<p class="small" style="white-space:pre-wrap">${esc(t.body)}</p></div><div class="choices"><button onclick="editTemplate('${esc(t.id)}')">Muuda</button><button onclick="deleteTemplate('${esc(t.id)}')">Kustuta</button></div></div></section>`).join('')}</div>${editId?renderTemplateForm():''}`}
+function flattenSteps(step){const a=[];let n=step;while(n&&a.length<50){a.push({type:n.type,purpose:n.purpose||n.subject||n.body||'Järeltegevus',subject:n.subject||'',body:n.body||'',days:String(n.days||5)});n=n.nextStep}return a}
+function setFollowType(v){templateDraft.next=v;render()}
+function addFollowStep(){templateDraft.chain ||= [];templateDraft.chain.push({type:'E-kiri',purpose:'',subject:'',body:'',days:'5',newPurpose:true});render()}
+function removeFollowStep(i){templateDraft.chain.splice(i);render()}
+function allPurposeEntries(){const entries=[];for(const t of data.templates){entries.push({type:t.type,purpose:t.purpose||t.name||'',subject:t.subject||'',body:t.body||'',updatedAt:t.updatedAt||0});if(!t.nextStep&&t.next)entries.push({type:t.next,purpose:t.nextPurpose||'',subject:t.nextSubject||'',body:t.nextBody||'',updatedAt:t.updatedAt||0});let n=t.nextStep;let depth=0;while(n&&depth++<50){entries.push({type:n.type,purpose:n.purpose||'',subject:n.subject||'',body:n.body||'',updatedAt:t.updatedAt||0});n=n.nextStep}}return entries.filter(e=>e.purpose.trim())}
+function purposeOptions(current){const purposes=[...new Set(allPurposeEntries().map(e=>e.purpose.trim()))].sort((a,b)=>a.localeCompare(b,'et'));if(current&&!purposes.includes(current))purposes.unshift(current);return `<option value="">Vali eesmärk</option>${purposes.map(p=>`<option value="${esc(p)}" ${p===current?'selected':''}>${esc(p)}</option>`).join('')}<option value="__new__">+ Lisa uus eesmärk…</option>`}
+function purposeControl(path,st){const isNew=!!st.newPurpose;return `<label>Eesmärk</label><select onchange="selectPurpose('${path}',this.value)">${purposeOptions(isNew?'':st.purpose||'')}</select>${isNew?`<input value="${esc(st.purpose||'')}" placeholder="Sisesta uus eesmärk" oninput="updatePurpose('${path}',this.value)">`:''}`}
+function purposeTarget(path){return path==='root'?templateDraft:path==='first'?templateDraft:templateDraft.chain[Number(path)]}
+function selectPurpose(path,value){const st=purposeTarget(path);if(value==='__new__'){if(path==='first'){st.nextPurpose='';st.nextNewPurpose=true;st.nextSubject='';st.nextBody=''}else{st.purpose='';st.newPurpose=true;st.subject='';st.body=''}render();return}const type=path==='first'?st.next:st.type;const matches=allPurposeEntries().filter(e=>e.purpose===value&&e.type===type).sort((a,b)=>b.updatedAt-a.updatedAt);const latest=matches[0];if(path==='first'){st.nextPurpose=value;st.nextNewPurpose=false;st.nextSubject=latest?.subject||'';st.nextBody=latest?.body||''}else{st.purpose=value;st.newPurpose=false;st.subject=latest?.subject||'';st.body=latest?.body||''}render()}
+function updatePurpose(path,value){const st=purposeTarget(path);if(path==='first')st.nextPurpose=value;else st.purpose=value}
+function purposeFor(path,st){return path==='first'?purposeControl(path,{purpose:st.nextPurpose,newPurpose:st.nextNewPurpose}):purposeControl(path,st)}
+function stepFields(st,i){return `<div class="panel" style="margin:10px 0;padding:14px;border-left:3px solid #537caa"><div class="bar"><b>Järeltegevus ${i+2}</b><button onclick="removeFollowStep(${i})">Eemalda see ja järgnevad</button></div><label>Tegevuse tüüp</label><select onchange="templateDraft.chain[${i}].type=this.value;render()">${MALL_TYPES.map(x=>`<option ${st.type===x?'selected':''}>${x}</option>`).join('')}</select>${purposeFor(String(i),st)}<label>Mitme tööpäeva pärast eelmist tegevust?</label><input type="number" min="1" value="${esc(st.days)}" oninput="templateDraft.chain[${i}].days=this.value">${st.type==='E-kiri'?`<label>Järelkirja pealkiri</label><input value="${esc(st.subject)}" oninput="templateDraft.chain[${i}].subject=this.value"><label>Järelkirja sisu</label><textarea rows="5" oninput="templateDraft.chain[${i}].body=this.value">${esc(st.body)}</textarea>`:`<label>Tegevuse juhis</label><textarea rows="4" oninput="templateDraft.chain[${i}].body=this.value">${esc(st.body)}</textarea>`}</div>`}
+function renderTemplateForm(){const t=templateDraft;t.chain ||= [];return `<div class="panel" style="margin-top:20px"><h3>${editId==='new'?'Loo uus mall':'Muuda malli'}</h3><div class="form"><label>Tegevuse tüüp</label><select onchange="templateDraft.type=this.value;render()">${MALL_TYPES.map(x=>`<option ${t.type===x?'selected':''}>${x}</option>`).join('')}</select>${purposeFor('root',t)}${t.type==='E-kiri'?`<label>E-kirja pealkiri</label><input value="${esc(t.subject)}" oninput="templateDraft.subject=this.value">`:''}<label>${t.type==='E-kiri'?'E-kirja sisu':'Tegevuse juhis'}</label><textarea oninput="templateDraft.body=this.value">${esc(t.body)}</textarea><label><input type="checkbox" style="width:auto" ${t.follow?'checked':''} onchange="templateDraft.follow=this.checked;render()"> Planeeri lõpetamisel järgmine järeltegevus</label>${t.follow?`<label>Järgmise tegevuse tüüp</label><select onchange="setFollowType(this.value)">${MALL_TYPES.map(x=>`<option ${t.next===x?'selected':''}>${x}</option>`).join('')}</select>${purposeFor('first',t)}<label>Mitme tööpäeva pärast?</label><input type="number" min="1" value="${esc(t.days)}" oninput="templateDraft.days=this.value">${t.next==='E-kiri'?`<label>Järelkirja pealkiri</label><input value="${esc(t.nextSubject||'')}" oninput="templateDraft.nextSubject=this.value"><label>Järelkirja sisu</label><textarea rows="5" oninput="templateDraft.nextBody=this.value">${esc(t.nextBody||'')}</textarea>`:`<label>Järgmise tegevuse juhis</label><textarea rows="4" oninput="templateDraft.nextBody=this.value">${esc(t.nextBody||'')}</textarea>`}${t.chain.map((st,i)=>stepFields(st,i)).join('')}<button onclick="addFollowStep()">+ Lisa järgmine järeltegevus</button>`:''}<div class="choices"><button class="primary" onclick="saveTemplate()">${editId==='new'?'Loo tegevusmall':'Salvesta muudatused'}</button><button onclick="editId=null;render()">Tühista</button></div></div></div>`}
+
+let adminDetail='none',adminFilter='all',budgetPercent='',churnPercent='',budgetDirection='increase',churnDirection='increase';
+function budgetTotals(){const initial=data.plans.reduce((a,p)=>a+Number(p.initialAnnual||0),0);const clients=data.plans.reduce((a,p)=>a+Number(p.annual||0),0);const churn=(data.churnAdjustments||[]).reduce((a,x)=>a+x.amount,0);const current=clients+churn;const changes=[...data.budgetChanges,...(data.churnAdjustments||[]).map(x=>({...x,client:'Liitumised / loobumised',owner:'—',before:0,after:x.amount,category:'churn'}))];const up=changes.filter(c=>c.after>c.before),down=changes.filter(c=>c.after<c.before);return {initial,current,up,down,increases:up.reduce((a,c)=>a+c.after-c.before,0),decreases:down.reduce((a,c)=>a+c.before-c.after,0)}}
+function applyBudgetPercent(){if(!isAdmin())return;const n=Number(budgetPercent);if(!Number.isFinite(n)||n<=0||n>100)return alert('Sisesta protsent vahemikus 0–100.');if(!data.plans.length)return alert('Kliente ei ole.');const signed=budgetDirection==='decrease'?-n:n;const changes=data.plans.map(p=>{const before=Number(p.annual),after=Math.round(before*(1+signed/100)*100)/100;return {p,before,after}});if(changes.some(x=>x.after<0))return alert('Eelarve ei tohi muutuda negatiivseks.');const reason=signed<0?prompt('Kõigi klientide eelarve vähendamise põhjendus (kohustuslik):'):'';if(signed<0&&(!reason||!reason.trim()))return alert('Muudatus tühistatud: põhjendus on kohustuslik.');if(!confirm(`Kas muuta kõigi ${changes.length} kliendi prognoosi ${signed>0?'+':''}${signed}% võrra?`))return;const date=new Date().toISOString().slice(0,10);changes.forEach(({p,before,after})=>{if(after===before)return;const ratio=before>0?after/before:1;p.annual=after;p.quarters=p.quarters.map(q=>Math.round(Number(q)*ratio*100)/100);p.quarters[3]=Math.round((after-p.quarters.slice(0,3).reduce((a,b)=>a+b,0))*100)/100;p.ackMonth=null;data.budgetChanges.push({client:p.client,actor:user,owner:p.owner,date,before,after,reason:reason||'',category:'general'});});budgetPercent='';save();notify('Kõigi klientide prognoosid uuendatud. Muudatused on detailvaates näha.');}
+function applyChurnPercent(){if(!isAdmin())return;const n=Number(churnPercent);if(!Number.isFinite(n)||n<=0||n>100)return alert('Sisesta protsent vahemikus 0–100.');const base=data.plans.reduce((a,p)=>a+Number(p.annual||0),0);const amount=Math.round(base*n/100)*(churnDirection==='decrease'?-1:1);if(!amount)return alert('Arvestuslik muutus on null.');const reason=churnDirection==='decrease'?prompt('Klientide loobumise prognoosi vähendamise põhjendus (kohustuslik):'):'';if(churnDirection==='decrease'&&(!reason||!reason.trim()))return alert('Muudatus tühistatud: põhjendus on kohustuslik.');if(!confirm(`Kas lisada liitumiste/loobumiste prognoosile ${amount>0?'+':''}${money(amount)}? See ei muuda üksikklientide eelarveid.`))return;data.churnAdjustments ||= [];data.churnAdjustments.push({date:new Date().toISOString().slice(0,10),actor:user,amount,before:0,after:amount,reason:reason||'',percent:n,category:'churn'});churnPercent='';save();notify('Liitumiste/loobumiste koondprognoos uuendatud. Üksikklientide eelarved ei muutunud.');}
+function renderAdminSummary(){const {initial,current,up,down,increases,decreases}=budgetTotals();const shownType=adminDetail==='up'?up:down;const names=[...new Set(shownType.map(c=>c.actor))];const shown=shownType.filter(c=>adminFilter==='all'||c.actor===adminFilter);const net=current-initial;return `<section class="panel" style="margin-top:18px"><div class="bar"><h2>Eelarve</h2><span class="muted">Näidisandmed · aasta alguse baas on fikseeritud</span></div><div class="metrics"><div class="metric" style="position:relative;padding-top:34px"><button type="button" title="Ava eelarve muutmine" aria-label="Ava eelarve muutmine" onclick="document.getElementById('budgetEditPanel').classList.toggle('hide')" style="position:absolute;top:9px;right:9px;border:1px solid #d7dce3;border-radius:7px;background:transparent;padding:4px 8px;font-size:17px;line-height:1;color:#687485;cursor:pointer">↗</button><div class="muted">Müügieelarve · aasta alguses</div><b>${money(initial)}</b><p class="small muted">Eelmise aasta kliendid ja nende mahud.</p><div id="budgetEditPanel" class="hide"><div class="form"><h3>Muuda müügieelarvet %</h3><label>Muudatuse suund</label><select onchange="budgetDirection=this.value"><option value="increase" ${budgetDirection==='increase'?'selected':''}>Suurenda</option><option value="decrease" ${budgetDirection==='decrease'?'selected':''}>Vähenda</option></select><label>Protsent (%)</label><input type="number" min="0.01" max="100" step="0.01" value="${esc(budgetPercent)}" oninput="budgetPercent=this.value" placeholder="Näiteks 5"><button class="primary" onclick="applyBudgetPercent()">Rakenda kõigile klientidele</button></div><div class="form"><h3>Liitumiste / loobumiste prognoos</h3><label>Muudatuse suund</label><select onchange="churnDirection=this.value"><option value="increase" ${churnDirection==='increase'?'selected':''}>Liitumised (+)</option><option value="decrease" ${churnDirection==='decrease'?'selected':''}>Loobumised (−)</option></select><label>Protsent klientide jooksva prognoosi summast (%)</label><input type="number" min="0.01" max="100" step="0.01" value="${esc(churnPercent)}" oninput="churnPercent=this.value" placeholder="Näiteks 3"><button class="primary" onclick="applyChurnPercent()">Lisa koondprognoosi</button></div></div></div><div class="metric"><div class="muted">Jooksev müügieelarve</div><b>${money(current)}</b><button style="display:block;margin-top:12px;width:100%;text-align:left" onclick="adminDetail=adminDetail==='up'?'none':'up';adminFilter='all';render()">Suurendamised kokku <b class="good">+${money(increases)}</b><span class="small">Vaata muudatusi</span></button><button style="display:block;margin-top:8px;width:100%;text-align:left" onclick="adminDetail=adminDetail==='down'?'none':'down';adminFilter='all';render()">Vähendamised kokku <b class="bad">−${money(decreases)}</b><span class="small">Vaata muudatusi</span></button></div><div class="metric"><div class="muted">Jooksev seis võrreldes aasta alguse eelarvega</div><b class="${net<0?'bad':'good'}">${net>0?'+':''}${money(net)}</b><div class="muted">${initial?((net/initial)*100).toFixed(1):'0.0'}% · informatiivne näitaja</div></div><div class="metric"><div class="muted">Arvestuse põhimõte</div><p class="small">Jooksev eelarve = klientide uuendatud prognoosid + liitumiste/loobumiste koondkorrektsioonid.</p><p class="small">Liitumiste ja loobumiste protsent ei muuda üksikklientide prognoose.</p></div></div>${adminDetail!=='none'?`<div class="divider"></div><h3>${adminDetail==='up'?'Eelarve suurendamised':'Eelarve vähendamised'} – detailid</h3><label>Muudatuse teinud kasutaja</label><select onchange="adminFilter=this.value;render()"><option value="all">Kõik kasutajad</option>${names.map(n=>`<option value="${esc(n)}" ${adminFilter===n?'selected':''}>${esc(n)}</option>`).join('')}</select><div style="overflow-x:auto;margin-top:12px"><table style="width:100%;border-collapse:collapse;text-align:left"><thead><tr><th>Kuupäev</th><th>Klient / liik</th><th>Müügimees</th><th>Muutja</th><th>Enne</th><th>Pärast</th><th>Muutus</th><th>Põhjus</th></tr></thead><tbody>${shown.map(c=>`<tr><td>${esc(c.date)}</td><td>${esc(c.client)}</td><td>${esc(c.owner||'—')}</td><td>${esc(c.actor)}</td><td>${c.category==='churn'?'—':money(c.before)}</td><td>${c.category==='churn'?'—':money(c.after)}</td><td class="${c.after<c.before?'bad':'good'}">${c.after>c.before?'+':'−'}${money(Math.abs(c.after-c.before))}</td><td>${esc(c.reason||'—')}</td></tr>`).join('')||'<tr><td colspan="8">Muudatusi veel ei ole.</td></tr>'}</tbody></table></div><p class="small muted">Liitumised / loobumised kuvatakse koondreana, sest konkreetseid kliente ei ole veel määratud.</p></div>`:''}</section>`}
+
+async function logoutCRM(){
+  try {
+    const response = await fetch('/api/logout', {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: {'Content-Type': 'application/json'}
+    });
+    if (!response.ok) throw new Error('Väljalogimine ebaõnnestus');
+    location.replace('/');
+  } catch (error) {
+    alert('Väljalogimine ebaõnnestus. Proovi uuesti.');
+  }
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  const button = document.createElement('button');
+  button.type = 'button';
+  button.textContent = 'Logi välja';
+  button.onclick = logoutCRM;
+  button.style.marginLeft = '12px';
+
+  const selector = document.getElementById('user');
+  if (selector && selector.parentElement) {
+    selector.insertAdjacentElement('afterend', button);
+  }
+});
+
+
+// Ellington CRM v8: päris tegevused, eesmärgid ja lõpetamise põhjused.
+
+const v8LegacyTemplates=(()=>{try{return JSON.parse(localStorage.getItem('ellington-crm-demo')||'{}').templates||[]}catch{return []}})();
+const v8Today=()=>new Intl.DateTimeFormat('sv-SE',{timeZone:'Europe/Tallinn',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
+const v8Api=async(path,options={})=>{const r=await fetch('/api'+path,{credentials:'same-origin',cache:'no-store',headers:{'Content-Type':'application/json'},...options});const x=await r.json().catch(()=>({}));if(!r.ok)throw new Error(x.error||'Päring ebaõnnestus ('+r.status+').');return x};
+const v8Options=(type,selected)=>'<option value="">Vali eesmärk</option>'+data.templates.filter(t=>t.type===type).map(t=>`<option value="${esc(t.id)}" ${String(t.id)===String(selected)?'selected':''}>${esc(t.purpose||t.name)}</option>`).join('');
+const v8Template=(id,type)=>data.templates.find(t=>String(t.id)===String(id)&&t.type===type);
+const v8Choice=(type)=>({type,templateId:'',purpose:'',subject:'',instructions:'',due:v8Today()});
+function v8SelectTemplate(target,id){const t=v8Template(id,target.type);target.templateId=t?String(t.id):'';target.purpose=t?.purpose||t?.name||'';target.subject=t?.subject||'';target.instructions=t?.body||'';}
+function v8ChangeType(type,where){const target=where==='next'?v8Active.next:v8Action;Object.assign(target,v8Choice(type));if(where==='next')render();else render();}
+function v8ChangePurpose(id,where){const target=where==='next'?v8Active.next:v8Action;v8SelectTemplate(target,id);if(where==='next')render();else render();}
+function v8PlannerFields(target,where){return `<label>Tegevuse tüüp</label><select onchange="v8ChangeType(this.value,'${where}')">${['Kõne','E-kiri','Kohtumine'].map(x=>`<option ${target.type===x?'selected':''}>${x}</option>`).join('')}</select><label>Eesmärk</label><select onchange="v8ChangePurpose(this.value,'${where}')">${v8Options(target.type,target.templateId)}</select>${target.purpose?`<div class="muted">Eesmärk: ${esc(target.purpose)}</div>`:''}${target.type==='E-kiri'?`<label>Kirja pealkiri</label><input value="${esc(target.subject)}" oninput="${where==='next'?'v8Active.next':'v8Action'}.subject=this.value">`:''}<label>${target.type==='E-kiri'?'Kirja sisu':'Tegevuse juhis'}</label><textarea rows="5" oninput="${where==='next'?'v8Active.next':'v8Action'}.instructions=this.value">${esc(target.instructions)}</textarea><label>Tegevuse kuupäev</label><input type="date" value="${esc(target.due)}" onchange="${where==='next'?'v8Active.next':'v8Action'}.due=this.value">`}
+
+function v8ReasonSelect(selected,handler){return `<select onchange="${handler}"><option value="">Vali põhjus</option>${v8Reasons.map(r=>`<option value="${r.id}" ${String(selected)===String(r.id)?'selected':''}>${esc(r.label)}</option>`).join('')}</select>`}
+function v8IsOther(id){return v8Reasons.find(r=>String(r.id)===String(id))?.label==='Muu põhjus'}
+
+function v8AddBusinessDays(d,n){let x=new Date(d+'T12:00:00Z'),i=0;while(i<n){x.setUTCDate(x.getUTCDate()+1);if(x.getUTCDay()!==0&&x.getUTCDay()!==6)i++;}return x.toISOString().slice(0,10)}
+
+// Mallide loomise olemasolev vorm jääb alles. Salvestamine käib serverisse.
+async function saveTemplate(){const t=templateDraft;const first={type:t.next,purpose:t.nextPurpose||'',subject:t.nextSubject||'',body:t.nextBody||'',days:Number(t.days)};const steps=t.follow?[first,...(t.chain||[]).map(x=>({...x,days:Number(x.days)}))]:[];if(!MALL_TYPES.includes(t.type)||!(t.purpose||'').trim()||!(t.body||'').trim()||(t.type==='E-kiri'&&!(t.subject||'').trim())||steps.some(x=>!MALL_TYPES.includes(x.type)||!(x.purpose||'').trim()||!(x.days>0)||(x.type==='E-kiri'&&(!(x.subject||'').trim()||!(x.body||'').trim()))))return alert('Täida kohustuslikud väljad.');let nextStep=null;for(let i=steps.length-1;i>=0;i--)nextStep={...steps[i],nextStep};try{await v8Api('/v8/templates',{method:'POST',body:JSON.stringify({id:editId==='new'?null:Number(editId),type:t.type,purpose:t.purpose.trim(),subject:t.subject||'',body:t.body,next:t.follow?t.next:null,days:t.follow?Number(t.days):null,nextStep})});editId=null;await v8ReloadConfig();notify('Mall salvestatud andmebaasi.');}catch(e){alert(e.message)}}
+async function deleteTemplate(i){if(!confirm('Kas eemaldada see mall valikust?'))return;try{await v8Api('/v8/templates/'+encodeURIComponent(i),{method:'DELETE'});editId=null;await v8ReloadConfig();notify('Mall eemaldatud.');}catch(e){alert(e.message)}}
+
+function renderTemplates(){return renderTemplatesBase()+`<section class="panel" style="margin-top:20px"><h3>Aktiivse jälgimise lõpetamise põhjused</h3><div class="stack">${v8Reasons.map(r=>`<div class="bar"><span>${esc(r.label)}</span><div class="choices"><button onclick="v8EditReason(${r.id})">Muuda</button><button onclick="v8DeleteReason(${r.id})">Kustuta</button></div></div>`).join('')}</div><div class="choices"><button class="primary" onclick="v8AddReason()">+ Lisa põhjus</button></div>${v8LegacyTemplates.length?`<div class="divider"></div><button onclick="v8ImportLegacyTemplates()">Impordi selle brauseri vanad mallid (${v8LegacyTemplates.length})</button><p class="muted">Imporditakse ainult puuduvad eesmärgid. Olemasolevaid malle ei kirjutata üle.</p>`:''}</section>`};
+async function v8ImportLegacyTemplates(){if(!v8LegacyTemplates.length)return alert('Selles brauseris pole vanu malle.');if(!confirm('Kas importida selle brauseri vanad mallid ühisesse andmebaasi? Olemasolevaid eesmärke ei muudeta.'))return;try{const x=await v8Api('/v8/templates/import',{method:'POST',body:JSON.stringify({templates:v8LegacyTemplates})});await v8ReloadConfig();alert('Imporditud: '+x.imported+'. Vahele jäetud: '+x.skipped+'.');}catch(e){alert(e.message)}}
+async function v8AddReason(){const label=prompt('Uue lõpetamise põhjuse nimetus:');if(!label)return;try{await v8Api('/v8/reasons',{method:'POST',body:JSON.stringify({label})});await v8ReloadConfig();}catch(e){alert(e.message)}}
+async function v8EditReason(id){const r=v8Reasons.find(x=>x.id===id);if(!r)return;const label=prompt('Muuda lõpetamise põhjust:',r.label);if(!label)return;try{await v8Api('/v8/reasons/'+id,{method:'PATCH',body:JSON.stringify({label})});await v8ReloadConfig();}catch(e){alert(e.message)}}
+async function v8DeleteReason(id){if(!confirm('Kas eemaldada põhjus valikust? Varasemad kirjed jäävad alles.'))return;try{await v8Api('/v8/reasons/'+id,{method:'DELETE'});await v8ReloadConfig();}catch(e){alert(e.message)}}
+async function v8ReloadConfig(){const x=await v8Api('/v8/config');data.templates=x.templates.map(t=>({...t,id:String(t.id),purpose:t.purpose||t.name,follow:!!(t.nextStep||t.next),nextPurpose:t.nextStep?.purpose||'',nextSubject:t.nextStep?.subject||'',nextBody:t.nextStep?.body||''}));v8Reasons=x.reasons;render();}
+
+let v8BudgetDraft=null;
+function v8BudgetEUR(n){return Number(n||0).toLocaleString('et-EE',{minimumFractionDigits:2,maximumFractionDigits:2})+' €'}
+async function v8BudgetPreview(id){try{const x=await v8Api('/clients/'+id+'/budget');if(page!=='clients'||Number(crmSelectedClient)!==Number(id))return;const el=$('clientBudgetPanel');if(!el)return;el.innerHTML=`<div class="muted">Jooksev eelarve · ${x.year}</div><b>${x.exists?v8BudgetEUR(x.annual):'Pole määratud'}</b><div style="margin-top:10px"><button onclick="v8BudgetOpen(${id})">Muuda eelarvet</button></div><div id="clientBudgetEdit"></div><div id="clientBudgetHistory" style="margin-top:16px"></div>`;v8BudgetLoadHistory(id);}catch(e){const el=$('clientBudgetPanel');if(el)el.innerHTML=`<p class="muted">Eelarvet ei õnnestunud laadida: ${esc(e.message)}</p>`;}}
+async function v8BudgetLoadHistory(id){
+ const el=$('clientBudgetHistory');if(!el)return;
+ try{
+  const data=await v8Api('/clients/'+id+'/budget/history');
+  if(!$('clientBudgetHistory'))return;
+  const rows=data.history||[];
+  const fmt=v=>v8BudgetEUR(v);
+  const dt=v=>{const d=new Date(v);return Number.isNaN(d.getTime())?String(v||''):d.toLocaleString('et-EE',{timeZone:'Europe/Tallinn',day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'});};
+  $('clientBudgetHistory').innerHTML=`<h3>Eelarve muudatuste ajalugu</h3>${rows.length?rows.map(h=>`<div style="border-top:1px solid var(--line,#ddd);padding:10px 0"><div><b>${esc(dt(h.created_at))}</b> · ${esc(h.user_name||'Kasutaja')}</div><div class="small">${fmt(h.before_annual)} → <b>${fmt(h.after_annual)}</b> (${h.year})</div>${h.reason?`<p class="small" style="white-space:pre-wrap;margin:6px 0"><b>Kommentaar:</b> ${esc(h.reason)}</p>`:''}</div>`).join(''):'<p class="muted small">Eelarvemuudatusi pole veel salvestatud.</p>'}`;
+ }catch(e){const node=$('clientBudgetHistory');if(node)node.innerHTML=`<p class="muted small">Eelarve ajalugu ei õnnestunud laadida: ${esc(e.message)}</p>`;}
+}
+async function v8BudgetOpen(id){try{const x=await v8Api('/clients/'+id+'/budget');v8BudgetDraft={id,mode:'annual',annual:String(x.annual),quarters:x.quarters.map(String),original:x.annual};v8BudgetRender();}catch(e){alert(e.message)}}
+function v8BudgetRender(){const d=v8BudgetDraft,el=$('clientBudgetEdit');if(!d||!el)return;el.innerHTML=`<div class="form"><h3>Muuda jooksvat eelarvet</h3><label>Sisestusviis</label><select onchange="v8BudgetMode(this.value)"><option value="annual" ${d.mode==='annual'?'selected':''}>Aastaeelarve</option><option value="quarterly" ${d.mode==='quarterly'?'selected':''}>Kvartalite kaupa</option></select>${d.mode==='annual'?`<label>Aastaeelarve (€)</label><input type="number" min="0" step="0.01" value="${esc(d.annual)}" oninput="v8BudgetDraft.annual=this.value">`:['I kvartal','II kvartal','III kvartal','IV kvartal'].map((label,i)=>`<label>${label} (€)</label><input type="number" min="0" step="0.01" value="${esc(d.quarters[i])}" oninput="v8BudgetDraft.quarters[${i}]=this.value">`).join('')}<div class="choices"><button class="primary" onclick="v8BudgetSave()">Salvesta</button><button onclick="v8BudgetDraft=null;$('clientBudgetEdit').innerHTML=''">Tühista</button></div><p class="small muted">Muudetakse ainult jooksvat eelarvet. Aasta alguse eelarvet ei muudeta.</p></div>`;}
+function v8BudgetMode(mode){const d=v8BudgetDraft;if(!d)return;if(mode==='quarterly'&&d.mode==='annual'){const n=Number(d.annual)||0;const cents=Math.round(n*100),base=Math.floor(cents/4);d.quarters=[base,base,base,cents-base*3].map(v=>String(v/100));}if(mode==='annual'&&d.mode==='quarterly')d.annual=String(d.quarters.reduce((s,x)=>s+(Number(x)||0),0));d.mode=mode;v8BudgetRender();}
+async function v8BudgetSave(){const d=v8BudgetDraft;if(!d)return;const total=d.mode==='annual'?Number(d.annual):d.quarters.reduce((s,x)=>s+Number(x),0);if(!Number.isFinite(total)||total<0)return alert('Sisesta korrektne eelarve.');let reason='';if(total<Number(d.original)){reason=prompt('Eelarve vähendamise põhjendus (kohustuslik):')||'';if(reason.trim().length<5)return alert('Eelarve vähendamine tühistati.');}try{await v8Api('/clients/'+d.id+'/budget',{method:'PUT',body:JSON.stringify({mode:d.mode,annual:d.annual,quarters:d.quarters,reason})});const id=d.id;v8BudgetDraft=null;await v8BudgetPreview(id);}catch(e){alert(e.message)}}
+async function v8BudgetRefreshSummary(){try{const x=await v8Api('/v8/budget/summary');if(page!=='budget')return;const cards=[...document.querySelectorAll('.metric')];const current=cards.find(c=>c.querySelector('.muted')?.textContent?.trim()==='Jooksev müügieelarve');if(current){const b=current.querySelector('b');if(b)b.textContent=v8BudgetEUR(x.current);let note=current.querySelector('.v8-real-budget-note');if(!note){note=document.createElement('p');note.className='small muted v8-real-budget-note';current.appendChild(note);}note.textContent=`Päris andmebaas · ${x.client_count} kliendi eelarvet · ${x.year}`;}const first=cards.find(c=>c.querySelector('.muted')?.textContent?.trim()==='Müügieelarve · aasta alguses');if(first){let note=first.querySelector('.v8-baseline-note');if(!note){note=document.createElement('p');note.className='small muted v8-baseline-note';first.appendChild(note);}note.textContent='NB! See näitaja pärineb endiselt prototüübi näidisandmetest; päris aasta alguse baasi pole andmebaasi kantud.';}}catch(e){console.error('Eelarve laadimine:',e)}}
+
+// CRM postkastid ja päris kasutajad (serveripõhine, mitte localStorage).
+
+function renderUsers(){return `<h2>Kasutajad · päris kontod</h2><div class="stack">${crmRealUsers.map(u=>`<section class="panel"><div class="bar"><div><b>${esc(u.name)}</b><div class="muted">${esc(u.email)} · ${u.role==='admin'?'Administraator':'Müügikasutaja'} · ${u.is_active?'Aktiivne':'Peatatud'}</div><div class="small muted">CRM postkast: ${esc(u.mailbox||'seadistamata')} ${u.mail_configured?'✓':''}</div></div><div class="choices"><button onclick="crmResetPassword(${u.id})">Muuda parool</button><button ${u.id===crmRealMe?.id?'disabled':''} onclick="crmToggleRealUser(${u.id},${u.is_active?false:true})">${u.is_active?'Peata':'Aktiveeri'}</button></div></div></section>`).join('')}</div><section class="panel" style="margin-top:16px"><h3>Lisa päris kasutaja</h3><div class="form"><label>Nimi</label><input id="crmNewName"><label>Sisselogimise e-post</label><input id="crmNewEmail" type="email"><label>Roll</label><select id="crmNewRole"><option value="sales">Müügikasutaja</option><option value="admin">Administraator</option></select><label>Ajutine parool (vähemalt 12 märki)</label><input id="crmNewPassword" type="password" autocomplete="new-password"><button class="primary" onclick="crmCreateRealUser()">Loo konto</button></div><p class="small muted">Postkasti parool seadistatakse eraldi serveris. Siin loodud parool on CRM-i sisselogimiseks.</p></section>`};
+async function crmLoadUsers(){if(crmRealMe?.role!=='admin')return;try{const x=await v8Api('/admin/users-real');crmRealUsers=x.users;if(page==='users')render();}catch(e){alert(e.message)}}
+
+
+async function crmCreateRealUser(){try{const x=await v8Api('/admin/users-real',{method:'POST',body:JSON.stringify({name:$('crmNewName').value,email:$('crmNewEmail').value,password:$('crmNewPassword').value,role:$('crmNewRole').value})});await crmLoadUsers();alert('Kasutaja loodud. ID: '+x.id+'. Lisa talle serveris CRM-i postkasti seadistus.');}catch(e){alert(e.message)}}
+async function crmToggleRealUser(id,active){if(!confirm(active?'Kas aktiveerida kasutaja?':'Kas peatada kasutaja?'))return;try{await v8Api('/admin/users-real/'+id,{method:'PATCH',body:JSON.stringify({action:'active',active})});await crmLoadUsers()}catch(e){alert(e.message)}}
+async function crmResetPassword(id){const p=prompt('Uus CRM-i sisselogimise parool (vähemalt 12 märki):');if(!p)return;try{await v8Api('/admin/users-real/'+id,{method:'PATCH',body:JSON.stringify({action:'password',password:p})});alert('Parool muudetud.')}catch(e){alert(e.message)}}
+
+// 2026-11-04: dashboard today's tasks only; no empty list sections.
+
+// Email: one editable composition, goal dropdown, then next-step planner; no duplicate instructions/comment.
+
+// CRM v8: postpone without sending; collapsed next-step choice and 14-day default.
+
+// IMAP reply alerts v2: automatic dashboard notifications, no manual sync button.
+
+// Refresh while CRM is open, and immediately when returning to its browser tab.
+
+// CRM v8: kohene tegevus, kohene nimekirja uuendus ja ühtne Ootele.
+
+// Pärast edukat saatmist kinnita tegevus sama töövooga, eraldi nupuvajutuseta.
+
+// Etapp 2: ühtne aktiivse tegevuse vorm (kõne, kohtumine, e-kiri).
+// Kirja saatmise järel ei lahendata tegevust enne kasutaja järgmise sammu valikut.
+
+// Planeeri hiljem: kasutame kliendikaardi planeerimisvormi, mitte ei saada kirja.
+
+// Saatmise vormis ei kuvata kõrvalist Sulge-nuppu.
+
+
+// Avatud tegevuse real ei dubleerita jälgimise lõpetamist.
+
+// Unified activity workflow. All views call these same forms and endpoints.
+let v8Active=null,v8Action=null,v8Stop=null,v8Pending=false,crmMailDraft=null;
+let crmReady=false,crmRealMe=null,crmRealUsers=[],crmReplyAlerts=[],crmReplyLoading=false,crmReplyReview=null;
+let crmSelectedClient=null,crmClientResult=null,crmClientMessages=[],crmClientReplies=[],crmClientRequest=0;
+const crmReplyIds=clientId=>[...new Set([...crmReplyAlerts,...crmClientReplies].filter(r=>Number(r.client_id||crmSelectedClient)===Number(clientId)&&!r.handled_at).map(r=>Number(r.id)))];
+const crmTask=a=>({id:Number(a.id),clientId:Number(a.client_id),client:a.client||crmClientResult?.client?.name||'',owner:a.owner_name||user,type:a.type,due:String(a.due_date).slice(0,10),state:a.status||'active',num:a.sequence_number||1,purpose:a.purpose||'',instructions:a.instructions||a.notes||'',subject:a.subject||'',templateId:a.template_id?String(a.template_id):'',nextStep:a.nextStep});
+function go(p){if(v8Pending)return;page=p;active=null;alertClient=null;notice='';if(p!=='clients'){crmSelectedClient=null;crmClientResult=null;}render();if(p==='users')crmLoadUsers();}
+function switchTab(t){if(v8Pending)return;tab=t;alertClient=null;notice='';render();}
+function renderClients(){
+ if(crmClientResult)return clientDetailHTML(crmClientResult)+crmMailHistoryHTML();
+ if(crmSelectedClient)return '<p class="muted">Laadin kliendikaarti…</p>';
+ setTimeout(updateClientResults,0);
+ return `<h2>Kliendid</h2><div class="panel"><label>Otsi klienti</label><input id="clientSearch" type="search" placeholder="Ettevõtte nimi" value="${esc(clientSearch)}" oninput="clientSearch=this.value;updateClientResults()"></div><div id="clientResults">${clientResultsHTML(clientMatches)}</div>`;
+}
+async function openClientById(id){
+ const request=++crmClientRequest;crmSelectedClient=Number(id);crmClientResult=null;crmClientMessages=[];crmClientReplies=[];render();
+ try{
+  const result=await v8Api('/clients/'+Number(id));if(request!==crmClientRequest||page!=='clients')return;
+  crmClientResult=result;render();
+  const loaded=await Promise.allSettled([v8Api('/mail/client/'+Number(id)+'/history'),v8Api('/mail/client/'+Number(id)+'/replies')]);
+  if(request!==crmClientRequest||page!=='clients')return;
+  crmClientMessages=loaded[0].status==='fulfilled'?loaded[0].value.messages:null;
+  crmClientReplies=loaded[1].status==='fulfilled'?loaded[1].value.replies.map(r=>({...r,client_id:Number(id)})):[];
+  const el=$('crmMailHistory');if(el)el.outerHTML=crmMailHistoryContent();
+ }catch(e){if(request===crmClientRequest){crmSelectedClient=null;crmClientResult=null;notice=e.message;render();}}
+}
+function crmBackToClients(){crmClientRequest++;crmSelectedClient=null;crmClientResult=null;render();}
+function crmMailHistoryContent(){return `<div id="crmMailHistory">${crmClientMessages===null?'<p class="muted">Kirjade ajalugu ei õnnestunud laadida.</p>':crmClientMessages.map(m=>`<div class="divider"><b>${esc(m.subject)}</b><div class="muted">${esc(m.sender)} → ${esc(m.recipient)} · ${esc(m.status)} · ${esc(m.sent_at||m.created_at||'')}</div><p style="white-space:pre-wrap">${esc(m.body)}</p></div>`).join('')||'<p class="muted">Saadetud kirju veel ei ole.</p>'}<h4>Saabunud e-kirjad</h4>${crmClientReplies.map(m=>`<div class="divider"><b>${esc(m.subject||'(Pealkirjata)')}</b><div class="muted">${esc(m.sender)} · ${esc(m.received_at||'')}</div><p style="white-space:pre-wrap">${esc(m.body||'')}</p>${!m.handled_at?`<button onclick="crmReviewReply(${Number(m.id)},${Number(crmSelectedClient)})">Käsitle vastust</button>`:''}</div>`).join('')||'<p class="muted">Saabunud vastuseid ei ole.</p>'}</div>`;}
+function crmMailHistoryHTML(){return `<section class="panel" style="margin-top:16px"><h3>CRM-i kirjade ajalugu</h3>${crmMailHistoryContent()}</section>`;}
+function crmClientActivities(result){
+ const stopped=result.client.stop_reason;
+ return `${stopped?`<p class="muted">Jälgimine lõpetatud · ${esc(stopped)}</p>`:`<div class="choices">${TYPES.map(t=>`<button onclick="showClientAction(${Number(result.client.id)},'${t}')">Uus ${t==='Kõne'?'kõne':t==='E-kiri'?'e-kiri':'kohtumine'}</button>`).join('')}<button onclick="showClientStop(${Number(result.client.id)})">Lõpeta jälgimine</button></div>`}<h3>Planeeritud tegevused</h3>${renderTasks((result.activities||[]).filter(a=>a.status==='active').map(crmTask))||'<p class="muted">Planeeritud tegevusi pole.</p>'}`;
+}
+function renderDashboard(){
+ const today=v8Today(),todayTasks=mine().filter(t=>t.due===today),overdue=mine().filter(t=>t.due<today);
+ const alerts=crmReplyAlerts.map(a=>`<section class="panel" style="border-left:5px solid #c62828"><div class="taskhead"><div><b>${esc(a.client_name)}</b><div class="bad"><b>Klient vastas</b></div><div class="muted">${esc(a.subject||'(Pealkirjata)')} · ${esc(a.sender)}</div></div><div class="choices"><button onclick="crmOpenReplyClient(${Number(a.client_id)})">Ava kliendikaart</button><button onclick="crmReviewReply(${Number(a.id)},${Number(a.client_id)})">Käsitle vastust</button><button onclick="crmReplyPlan(${Number(a.client_id)})">Planeeri uus tegevus</button><button onclick="crmReplyStop(${Number(a.client_id)})">Lõpeta jälgimine</button></div></div></section>`).join('');
+ return `<div class="cards"><button class="card ${tab==='activities'?'active':''}" onclick="switchTab('activities')">Tegevused<strong>${todayTasks.length+crmReplyAlerts.length}</strong><span class="muted">Täna</span></button><button class="card ${tab==='overdue'?'active':''}" onclick="switchTab('overdue')">Hilinenud<strong>${overdue.length}</strong><span class="muted">Üle tähtaja</span></button><button class="card ${tab==='warnings'?'active':''}" onclick="switchTab('warnings')">Käibehoiatused<strong>${warns().length}</strong></button></div>${tab==='warnings'?renderWarnings():renderTasks(tab==='activities'?todayTasks:overdue)}${tab==='activities'&&alerts?`<h2>Klientide vastused · tänased tegevused</h2><div class="stack">${alerts}</div>`:''}`;
+}
+function renderTasks(list){return list.length?`<div class="stack">${list.map(t=>`<section class="panel"><div class="taskhead"><div><b>${esc(t.client)}</b><div>${esc(t.type)} · ${esc(t.purpose||'Eesmärk määramata')}</div><div class="muted">${esc(t.due)} · ${esc(t.owner)}</div></div><button class="primary" onclick="v8OpenTask(${Number(t.id)})">Ava tegevus</button></div></section>`).join('')}</div>`:'';}
+async function v8ReloadTasks(){const x=await v8Api('/v8/activities');data.tasks=x.activities.map(crmTask);}
+async function crmRefresh(){
+ const results=await Promise.allSettled([v8ReloadTasks(),crmLoadReplyAlerts(false)]);
+ if(crmSelectedClient&&page==='clients')await openClientById(crmSelectedClient);else render();
+ if(results[0].status==='rejected') {notice='Salvestatud, kuid nimekirja värskendamine ebaõnnestus. Laadi leht uuesti.';render();}
+}
+function crmScrollForm(){setTimeout(()=>$('crmWorkflow')?.scrollIntoView({behavior:'smooth',block:'start'}),0);}
+function v8OpenTask(id){
+ if(v8Pending)return;
+ const t=data.tasks.find(x=>x.id===id)||(crmClientResult?.activities||[]).map(crmTask).find(x=>x.id===id);if(!t)return;
+ crmMailDraft=null;v8Action=null;v8Stop=null;crmReplyReview=null;
+ const next=v8Choice(t.nextStep?.type||'Kõne');
+ if(t.nextStep){const match=data.templates.find(x=>x.type===next.type&&(x.purpose||x.name)===t.nextStep.purpose);if(match)v8SelectTemplate(next,match.id);next.due=v8AddBusinessDays(v8Today(),Number(t.nextStep.days)||5);}
+ v8Active={id,task:t,phase:'work',comment:'',outcome:t.type==='Kohtumine'?'':'done',nextMode:'default',next,reason:'',other:'',postponeOpen:false,postponeDate:'',replyIds:crmReplyIds(t.clientId)};render();crmScrollForm();
+ if(t.type==='E-kiri')crmOpenMail(id);
+}
+function v8SetOutcome(value){if(v8Active?.phase==='work'&&!v8Pending){v8Active.outcome=value;render();}}
+function v8SetNextMode(value){if(v8Active?.phase==='completed'&&!v8Pending){v8Active.nextMode=value;render();}}
+function v8SetStopReason(value){if(v8Active){v8Active.reason=value;render();}}
+function crmCloseWorkflow(){if(v8Pending)return;v8Active=null;v8Action=null;v8Stop=null;crmMailDraft=null;crmReplyReview=null;render();}
+function crmPostponeToggle(){if(v8Active?.phase==='work'&&!v8Pending){v8Active.postponeOpen=!v8Active.postponeOpen;render();}}
+async function crmPostponeCurrent(){
+ const s=v8Active;if(!s||v8Pending||s.phase!=='work')return;
+ if(!s.postponeDate||s.postponeDate<=v8Today()||s.postponeDate<=s.task.due)return alert('Vali tänasest ja senisest tähtajast hilisem kuupäev.');
+ try{v8Pending=true;render();await v8Api('/v8/activities/'+s.id+'/resolve',{method:'POST',body:JSON.stringify({action:'postpone',new_date:s.postponeDate})});v8Active=null;crmMailDraft=null;await crmRefresh();}
+ catch(e){alert(e.message)}finally{v8Pending=false;render();}
+}
+async function v8ResolveTask(){
+ const s=v8Active;if(!s||v8Pending)return;
+ const completing=s.phase==='work';
+ if(completing&&s.task.type==='E-kiri')return alert('Saada kiri saatmisvormist.');
+ if(completing&&(!s.comment.trim()||(s.task.type==='Kohtumine'&&(!s.outcome||s.comment.trim().length<5))))return alert('Kirjuta tegevuse tulemus ja vali kohtumise korral tulemus.');
+ if(!completing&&s.nextMode==='default'){crmCloseWorkflow();return;}
+ if(!completing&&s.nextMode==='stop'&&!confirm('Kas lõpetada kliendi jälgimine?'))return;
+ try{
+  v8Pending=true;render();
+  const result=await v8Api('/v8/activities/'+s.id+(completing?'/resolve':'/next-step'),{method:'POST',body:JSON.stringify(completing?{action:'complete',outcome:s.outcome,comment:s.comment,reply_ids:s.replyIds}:{next:s.nextMode,reason_id:Number(s.reason),reason_other:s.other,planned:crmPlanned(s.next)})});
+  if(completing){s.phase='completed';s.completion=result;s.nextMode='default';}else{v8Active=null;crmMailDraft=null;}
+  await crmRefresh();
+ }catch(e){alert(e.message)}finally{v8Pending=false;render();}
+}
+const crmPlanned=a=>({type:a.type,due_date:a.due,template_id:a.templateId?Number(a.templateId):null,purpose:a.purpose,subject:a.subject,instructions:a.instructions});
+function crmNextHTML(s){return `<p class="good" role="status">Tegevus on lõpetatud ja tulemus ajalukku salvestatud. Vaikimisi järeltegevus: ${esc(s.completion?.due_date||'14 päeva pärast')}.</p><h3>Järgmine samm</h3><div class="choices"><button onclick="v8SetNextMode('plan')">Planeeri järgmine tegevus</button><button onclick="v8SetNextMode('stop')">Lõpeta jälgimine</button></div>${s.nextMode==='plan'?v8PlannerFields(s.next,'next'):s.nextMode==='stop'?`<label>Lõpetamise põhjus</label>${v8ReasonSelect(s.reason,'v8SetStopReason(this.value)')}${v8IsOther(s.reason)?`<label>Täpsustus</label><textarea oninput="v8Active.other=this.value">${esc(s.other)}</textarea>`:''}`:'<p class="muted">Kui järgmist sammu ei vali või sulged vormi, jääb kehtima 14-päevane ooteaeg.</p>'}<button class="primary" onclick="v8ResolveTask()">${s.nextMode==='default'?'Jäta 14 päevaks ootele':s.nextMode==='stop'?'Kinnita lõpetamine':'Salvesta järgmine tegevus'}</button>`;}
+function v8RenderTaskForm(t){
+ const s=v8Active;if(!s)return '';
+ if(s.phase==='completed')return crmNextHTML(s);
+ if(s.postponeOpen)return `<h3>${t.type==='E-kiri'?'Planeeri kiri hiljem':'Tegevuse edasilükkamine'}</h3><label>Uus kuupäev</label><input type="date" min="${v8Today()}" value="${esc(s.postponeDate)}" onchange="v8Active.postponeDate=this.value"><button class="primary" onclick="crmPostponeCurrent()">Salvesta uus kuupäev</button><button onclick="crmPostponeToggle()">Tagasi tegevuse juurde</button>`;
+ if(t.type==='E-kiri')return `${crmMailDraft?.id===t.id?crmMailForm(t):'<p class="muted">Laadin saatmisvormi…</p><button onclick="crmOpenMail('+t.id+')">Laadi saatmisolek uuesti</button>'}${!crmMailDraft?.sent&&!crmMailDraft?.blocked?'<button onclick="crmPostponeToggle()">Planeeri hiljem</button>':''}`;
+ return `${t.instructions?`<label>Tegevuse juhis</label><p style="white-space:pre-wrap">${esc(t.instructions)}</p>`:''}${t.type==='Kohtumine'?`<label>Kohtumise tulemus</label><select onchange="v8SetOutcome(this.value)"><option value="">Vali tulemus</option><option value="done" ${s.outcome==='done'?'selected':''}>Toimus</option><option value="cancelled" ${s.outcome==='cancelled'?'selected':''}>Jäi ära</option></select>`:''}<label>${t.type==='Kõne'?'Kõne tulemuse kommentaar':'Kohtumise tulemuse kommentaar'}</label><textarea rows="4" maxlength="5000" oninput="v8Active.comment=this.value">${esc(s.comment)}</textarea><button class="primary" onclick="v8ResolveTask()">Tehtud</button><button onclick="crmPostponeToggle()">Lükka tegevus edasi</button>`;
+}
+function crmWorkflowHTML(){
+ if(!v8Active&&!v8Action&&!v8Stop&&!crmReplyReview)return '';
+ const title=v8Active?v8Active.task.type+' · '+v8Active.task.client:v8Action?'Uus '+v8Action.type:v8Stop?'Lõpeta jälgimine':'Kliendi vastuse käsitlemine';
+ const body=v8Active?v8RenderTaskForm(v8Active.task):v8Action?v8RenderAction():v8Stop?v8RenderClientStop():`<label>Käsitlemise tulemus / kokkulepe</label><textarea maxlength="5000" oninput="crmReplyReview.note=this.value">${esc(crmReplyReview.note)}</textarea><button class="primary" onclick="crmHandleReply()">Salvesta käsitlemise tulemus</button>`;
+ return `<section class="panel" id="crmWorkflow" style="margin-top:18px;border:2px solid #1f4d93"><div class="bar"><h3>${esc(title)}</h3><button ${v8Pending?'disabled':''} onclick="crmCloseWorkflow()">Sulge</button></div><fieldset ${v8Pending?'disabled':''} style="border:0;padding:0;margin:0;min-width:0"><div class="form">${body}</div></fieldset>${v8Pending?'<p role="status">Salvestan…</p>':''}</section>`;
+}
+function showClientAction(id,type){if(v8Pending)return;v8Active=null;v8Stop=null;crmReplyReview=null;crmMailDraft=null;v8Action={...v8Choice(type),clientId:Number(id),replyIds:crmReplyIds(id)};render();crmScrollForm();}
+function v8RenderAction(){return `${v8PlannerFields(v8Action,'client')}<div class="choices"><button class="primary" onclick="v8SaveClientAction('open')">${v8Action.type==='E-kiri'?'Ava kirja koostamine':'Ava tegevus'}</button><button onclick="v8SaveClientAction('schedule')">Salvesta planeering</button></div><p class="muted">Planeerimine ei lõpeta tegevust ega suurenda järeltegevuste loendurit.</p>`;}
+async function v8SaveClientAction(mode){
+ const a=v8Action;if(!a||v8Pending)return;
+ try{v8Pending=true;render();const x=await v8Api('/v8/activities',{method:'POST',body:JSON.stringify({client_id:a.clientId,...crmPlanned(a),reply_ids:mode==='schedule'?a.replyIds:[]})});v8Action=null;await crmRefresh();v8Pending=false;
+ if(mode==='open'){v8OpenTask(Number(x.id));if(v8Active)v8Active.replyIds=a.replyIds;}
+ }catch(e){alert(e.message)}finally{v8Pending=false;render();}
+}
+function showClientStop(id){if(v8Pending)return;v8Active=null;v8Action=null;crmReplyReview=null;crmMailDraft=null;v8Stop={clientId:Number(id),reason:'',other:'',replyIds:crmReplyIds(id)};render();crmScrollForm();}
+function v8RenderClientStop(){const s=v8Stop;return `<p class="muted">Aktiivsed tegevused peatatakse. Klient ja ajalugu säilivad.</p><label>Põhjus</label>${v8ReasonSelect(s.reason,'v8Stop.reason=this.value;render()')}${v8IsOther(s.reason)?`<label>Täpsustus</label><textarea oninput="v8Stop.other=this.value">${esc(s.other)}</textarea>`:''}<button class="primary" onclick="v8SaveClientStop()">Kinnita lõpetamine</button>`;}
+async function v8SaveClientStop(){
+ const s=v8Stop,r=v8Reasons.find(r=>String(r.id)===String(s?.reason));if(!s||v8Pending)return;if(!r||(v8IsOther(s.reason)&&s.other.trim().length<5))return alert('Vali põhjus ja vajadusel täpsusta.');
+ if(!confirm('Kas lõpetada kliendi aktiivne jälgimine?'))return;
+ try{v8Pending=true;render();await v8Api('/clients/'+s.clientId+'/stop-monitoring',{method:'POST',body:JSON.stringify({reason:r.label+(v8IsOther(s.reason)?': '+s.other.trim():''),reply_ids:s.replyIds})});v8Stop=null;await crmRefresh();}catch(e){alert(e.message)}finally{v8Pending=false;render();}
+}
+async function crmOpenMail(id){
+ const state=v8Active;if(!state||v8Pending)return;
+ try{
+ const x=await v8Api('/mail/activity/'+id);if(v8Active!==state)return;
+ if(x.send?.status==='sent'){
+  const result=await v8Api('/v8/activities/'+id+'/resolve',{method:'POST',body:JSON.stringify({action:'complete',reply_ids:state.replyIds})});
+  if(v8Active!==state)return;state.phase='completed';state.completion=result;await crmRefresh();return;
+ }
+ if(x.send){crmMailDraft={id,blocked:true,status:x.send.status};render();return;}
+ if(!x.configured)throw Error('Sinu CRM-i postkast pole seadistatud. Kirja saab eraldi hilisemaks planeerida.');
+ if(!x.contacts.length)throw Error('Kliendil puudub e-posti aadressiga kontaktisik.');
+ const c=x.contacts.find(c=>String(c.id)===String(x.activity.contact_id))||x.contacts[0];
+ crmMailDraft={id,contacts:x.contacts,contactId:c.id,recipient:c.email,templateId:String(x.activity.template_id||''),subject:x.activity.subject||'',body:x.activity.instructions||'',sent:false};render();
+ }catch(e){alert(e.message)}
+}
+function crmMailChoosePurpose(value){const d=crmMailDraft;if(!d||v8Pending)return;const t=v8Template(value,'E-kiri');d.templateId=t?String(t.id):'';d.subject=t?.subject||'';d.body=t?.body||'';render();}
+function crmMailForm(t){const d=crmMailDraft;if(d.blocked)return `<p class="bad">Saatmine on registreeritud olekuga „${esc(d.status)}”. Uut saatmist ei tehta. Palu administraatoril saatmist kontrollida.</p>`;
+ return `<label>Kontaktisik</label><select onchange="crmMailDraft.contactId=Number(this.value);crmMailDraft.recipient=crmMailDraft.contacts.find(c=>Number(c.id)===Number(this.value)).email;render()">${d.contacts.map(c=>`<option value="${Number(c.id)}" ${Number(c.id)===Number(d.contactId)?'selected':''}>${esc(c.name)} · ${esc(c.email)}</option>`).join('')}</select><label>Saaja e-posti aadress</label><input id="crmMailRecipient" type="email" value="${esc(d.recipient)}" oninput="crmMailDraft.recipient=this.value"><p class="muted">Aadressi muutmine kehtib ainult sellele kirjale.</p><label>Eesmärk</label><select onchange="crmMailChoosePurpose(this.value)">${v8Options('E-kiri',d.templateId)}</select><label>Kirja pealkiri</label><input maxlength="500" id="crmMailSubject" value="${esc(d.subject)}" oninput="crmMailDraft.subject=this.value"><label>Kirja sisu</label><textarea maxlength="10000" id="crmMailBody" rows="9" oninput="crmMailDraft.body=this.value">${esc(d.body)}</textarea><button class="primary" onclick="crmSendMail(${Number(t.id)})">Saada kiri</button>`;
+}
+async function crmSendMail(id){
+ const d=crmMailDraft,s=v8Active;if(!d||!s||d.id!==id||d.blocked||v8Pending||s.phase!=='work')return;
+ const tpl=v8Template(d.templateId,'E-kiri');if(!tpl||!d.subject.trim()||!d.body.trim()||!/^[^\s@<>;,]+@[^\s@<>;,]+\.[^\s@<>;,]+$/.test(d.recipient.trim()))return alert('Vali eesmärk ning täida korrektne saaja, pealkiri ja sisu.');
+ if(!confirm('Kas saata kiri aadressile '+d.recipient.trim()+'?'))return;
+ try{v8Pending=true;render();const x=await v8Api('/mail/activity/'+id+'/send',{method:'POST',body:JSON.stringify({contact_id:Number(d.contactId),recipient:d.recipient.trim(),template_id:Number(d.templateId),purpose:tpl.purpose||tpl.name,subject:d.subject,body:d.body,reply_ids:s.replyIds})});d.sent=true;s.phase='completed';s.completion=x.completion;s.nextMode='default';await crmRefresh();}
+ catch(e){d.blocked=true;d.status='kontrolli saatmisolekut';alert(e.message)}finally{v8Pending=false;render();}
+}
+async function crmLoadReplyAlerts(redraw=true){
+ if(crmReplyLoading)return;crmReplyLoading=true;
+ try{const x=await v8Api('/mail/reply-alerts');const changed=JSON.stringify(x.alerts)!==JSON.stringify(crmReplyAlerts);crmReplyAlerts=x.alerts||[];if(redraw&&changed&&page==='dashboard')render();}
+ catch(e){console.warn('Vastuste laadimine:',e.message)}finally{crmReplyLoading=false;}
+}
+function crmReviewReply(id,clientId){if(v8Pending)return;v8Active=null;v8Action=null;v8Stop=null;crmReplyReview={id,clientId,note:''};render();crmScrollForm();}
+async function crmHandleReply(){const d=crmReplyReview;if(!d||v8Pending)return;if(d.note.trim().length<5)return alert('Kirjuta vastuse käsitlemise tulemus (vähemalt 5 märki).');
+ try{v8Pending=true;render();await v8Api('/mail/reply-alerts/'+d.id+'/handled',{method:'POST',body:JSON.stringify({note:d.note})});crmReplyReview=null;await crmRefresh();}catch(e){alert(e.message)}finally{v8Pending=false;render();}}
+async function crmOpenReplyClient(id){go('clients');return openClientById(Number(id));}
+async function crmReplyPlan(id){await crmOpenReplyClient(id);if(crmClientResult)showClientAction(Number(id),'Kõne');}
+async function crmReplyStop(id){await crmOpenReplyClient(id);if(crmClientResult)showClientStop(Number(id));}
+async function startCRM(){
+ try{const x=await v8Api('/me');crmRealMe=x.user;if(!crmRealMe?.name){location.replace('/');return;}
+ user=crmRealMe.name;data.users=[{name:user,role:crmRealMe.role,active:true}];data.tasks=[];data.plans=[];data.stopped={};
+ $('user').disabled=true;await v8ReloadConfig();await v8ReloadTasks();await crmLoadReplyAlerts(false);crmReady=true;render();
+ }catch(e){$('app').textContent='CRM-i laadimine ebaõnnestus: '+e.message;}
+}
+setInterval(()=>crmLoadReplyAlerts(),60000);
+document.addEventListener('visibilitychange',()=>{if(!document.hidden)crmLoadReplyAlerts();});
+startCRM();
+</script></body></html>

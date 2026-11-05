@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="et">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Ellington CRM – Sisselogimine</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      background: #f3f5f9;
+      font-family: Arial, sans-serif;
+      color: #17233b;
+    }
+    .login {
+      width: min(400px, 92%);
+      background: white;
+      padding: 36px;
+      border-radius: 14px;
+      box-shadow: 0 10px 35px #17233b15;
+    }
+    h1 { margin: 0 0 8px; font-size: 28px; }
+    p { color: #667085; margin-bottom: 28px; }
+    label {
+      display: block;
+      margin: 16px 0 7px;
+      font-weight: bold;
+    }
+    input {
+      width: 100%;
+      padding: 13px;
+      border: 1px solid #cbd2dc;
+      border-radius: 8px;
+      font-size: 16px;
+    }
+    button {
+      width: 100%;
+      margin-top: 24px;
+      padding: 14px;
+      border: 0;
+      border-radius: 8px;
+      background: #183b67;
+      color: white;
+      font-size: 16px;
+      cursor: pointer;
+    }
+    button:disabled {
+      opacity: .6;
+      cursor: wait;
+    }
+    #message {
+      margin-top: 18px;
+      color: #b42318;
+    }
+  </style>
+</head>
+<body>
+  <main class="login">
+    <h1>Ellington CRM</h1>
+    <p>Sisene oma kasutajakontoga</p>
+
+    <form id="loginForm">
+      <label for="email">E-posti aadress</label>
+      <input id="email" type="email" autocomplete="username" required>
+
+      <label for="password">Parool</label>
+      <input id="password" type="password" autocomplete="current-password" required>
+
+      <button id="submitButton" type="submit">Logi sisse</button>
+      <div id="message" role="status" aria-live="polite"></div>
+    </form>
+  </main>
+
+  <script>
+    const form = document.getElementById('loginForm');
+    const message = document.getElementById('message');
+    const button = document.getElementById('submitButton');
+
+    form.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      message.textContent = '';
+      message.style.color = '#b42318';
+      button.disabled = true;
+
+      try {
+        const response = await fetch('/api/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'same-origin',
+          body: JSON.stringify({
+            email: document.getElementById('email').value,
+            password: document.getElementById('password').value
+          })
+        });
+
+        if (!response.ok) {
+          message.textContent = 'Sisselogimine ebaõnnestus. Kontrolli andmeid.';
+          return;
+        }
+
+        document.getElementById('password').value = '';
+        message.style.color = '#067647';
+        message.textContent = 'Sisselogimine õnnestus!';
+        window.location.replace('/prototype-preview');
+      } catch {
+        message.textContent = 'Serveriga ühendamine ebaõnnestus.';
+      } finally {
+        button.disabled = false;
+      }
+    });
+  </script>
+</body>
+</html>
