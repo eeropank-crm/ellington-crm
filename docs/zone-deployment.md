@@ -42,6 +42,7 @@ CURRENT_APP='/asenda/senise/rakenduse/absoluutse/teega'
 ENV_FILE="$CURRENT_APP/.env"
 DB_HOST='asenda_tegeliku_hostiga'
 DB_NAME='asenda_tegeliku_andmebaasinimega'
+HEALTH_HOST='127.0.135.83'
 export ELLINGTON_PM2_NAME='asenda_senise_pm2_protsessi_nimega'
 node --version
 npm --version
@@ -49,6 +50,14 @@ pm2 --version
 mariadb-dump --version
 mariadb --version
 ```
+
+`HEALTH_HOST` on selle Zone.ee konto tervisekontrolli aadress, mitte
+andmebaasi host. Sellel serveril kinnitati kuulamisaadress `127.0.135.83`:
+`127.0.0.1` andis ECONNREFUSED, kuigi sama rakendus vastas konto loopback-IP-l
+õige väljalaske SHA-ga. Määra siin `HEALTH_HOST=127.0.135.83` ja edasta see
+allolevatele käskudele. Muudes keskkondades on valiku `--health-host` vaikimisi
+väärtus `127.0.0.1`. Lubatud on ainult otsene IPv4 loopback-IP või `::1`;
+DNS-nimesid, väliseid aadresse, puhverserverit ega HTTP ümbersuunamisi ei kasutata.
 
 `.env` peab juba olemas olema ja sisaldama `DB_HOST`, `DB_PORT` (vaikimisi 3306),
 `DB_USER`, `DB_PASSWORD`, `DB_NAME`, `SESSION_SECRET` ning vajadusel `PORT` väärtust.
@@ -80,7 +89,7 @@ npm ci --omit=dev --ignore-scripts --no-audit --no-fund
 CONTROL="$SOURCE/ops/pm2-control.js"
 node ops/deploy.js preflight \
   --env "$ENV_FILE" --host "$DB_HOST" --database "$DB_NAME" \
-  --revision "$REVISION"
+  --revision "$REVISION" --health-host "$HEALTH_HOST"
 ```
 
 Väljundis peab olema `"ok": true`. Kontroll loeb ainult skeemimetaandmeid ja
@@ -108,7 +117,7 @@ see lipp ei peata väliseid teenuseid ise. Veebirakenduse peatab kontrolladapter
 node ops/deploy.js apply \
   --env "$ENV_FILE" --host "$DB_HOST" --database "$DB_NAME" \
   --revision "$REVISION" --root "$ROOT" --control "$CONTROL" \
-  --dump-command mariadb-dump --maintenance-confirmed
+  --dump-command mariadb-dump --health-host "$HEALTH_HOST" --health-host "$HEALTH_HOST" --maintenance-confirmed
 ```
 
 MySQLi tööriistade korral kasuta `--dump-command mysqldump`. MySQLi dump keelab
@@ -133,7 +142,7 @@ Skript teeb järjekorras:
 6. Käivitab ainult teadaolevad ootel migratsioonid, kontrollib lõppskeemi ja
    olemasolevate andmetabelite kirjete arvude säilimist.
 7. Vahetab `current` sümbollingi aatomiliselt, käivitab uue versiooni ja kontrollib
-   loopback-aadressil `/health` vastuses just selle commit'i tunnust, `/api/me`
+   valitud `HEALTH_HOST` loopback-aadressil `/health` vastuses just selle commit'i tunnust, `/api/me`
    anonüümset 401 vastust ning kaitstud prototüübi 302 ümbersuunamist.
 
 Skript ei käivita sünteetiliste andmete lisamist, kliendiimporti ega kirjasaatmist.
@@ -166,7 +175,7 @@ saab sama kontrollitud varukoopia järgi vana koodi taastada ka käsuga:
 node ops/deploy.js rollback \
   --env "$ENV_FILE" --host "$DB_HOST" --database "$DB_NAME" \
   --root "$ROOT" --control "$CONTROL" --backup "$BACKUP_ID" \
-  --maintenance-confirmed
+  --health-host "$HEALTH_HOST" --maintenance-confirmed
 ```
 
 Skript lubab seda ainult muutumata konfiguratsiooni ja varasema skeemi korral.
@@ -205,7 +214,7 @@ Kui taastamine on kinnitatud:
 node ops/deploy.js rollback \
   --env "$RESTORE_ENV" --host "$RESTORE_HOST" --database "$RESTORE_DB" \
   --root "$ROOT" --control "$CONTROL" --backup "$BACKUP_ID" \
-  --maintenance-confirmed --restored
+  --health-host "$HEALTH_HOST" --maintenance-confirmed --restored
 ```
 
 Vana kood pakitakse varukoopiast uude taastamisväljalaskesse; selle `.env` viitab
@@ -237,3 +246,19 @@ PR #4 järel kogutud 52 konkreetse pärandskeemi erinevuse jaoks vaata
 [üleminekumigratsiooni analüüsi ja lisapäringuid](legacy-schema-transition.md).
 Selle ülemineku järjekord on 001 → 002 → 003 → 004; neljandat migratsiooni lubab
 range eelkontroll ainult teadaoleva lähteprofiili ja nulltulemustega andmekontrollide korral.
+
+
+## Zone.ee tervisekontrolli parandus
+
+Tervisekontroll kasutab sama valitud aadressi nii väljalaske SHA kontrolliks kui
+ka `/api/me` 401 ja `/prototype-preview` 302 kontrolliks. Edukas vastus valelt
+versioonilt või autentimiskaitsete puudumine peatab töö endiselt. `--host` jääb
+andmebaasi hostiks; rakenduse `.env`, kasutajakontod ja migratsioonid ei muutu.
+Valitud aadress salvestatakse uue varukoopia `manifest.json` faili `healthHost`
+väljale. Taastamine kasutab käsurea aadressi või selle puudumisel manifesti
+väärtust. Vanade, selle väljata varukoopiate korral lisa Zone.ee-s taastamisele
+selgesõnaliselt `--health-host 127.0.135.83`.
+
+See muudatus ei paigalda midagi serverisse ega muuda esimese paigalduse
+`failed` žurnaali: seal peatati protsess vale tervisekontrolli aadressi tõttu
+ja õige versiooni toimimine kinnitati hiljem konto loopback-IP-l.
