@@ -117,7 +117,7 @@ see lipp ei peata väliseid teenuseid ise. Veebirakenduse peatab kontrolladapter
 node ops/deploy.js apply \
   --env "$ENV_FILE" --host "$DB_HOST" --database "$DB_NAME" \
   --revision "$REVISION" --root "$ROOT" --control "$CONTROL" \
-  --dump-command mariadb-dump --health-host "$HEALTH_HOST" --health-host "$HEALTH_HOST" --maintenance-confirmed
+  --dump-command mariadb-dump --health-host "$HEALTH_HOST" --maintenance-confirmed
 ```
 
 MySQLi tööriistade korral kasuta `--dump-command mysqldump`. MySQLi dump keelab
