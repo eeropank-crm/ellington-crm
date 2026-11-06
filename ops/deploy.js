@@ -14,7 +14,6 @@ const source=path.resolve(__dirname,'..');
 const required=['package.json','package-lock.json','public/index.html','private/dashboard.html','private/v8/prototuup_v8.html','server/index.js','server/app.js','server/db.js','server/session.js','server/auth.js','server/work-mode.js',
  'server/routes/login.js','server/routes/account.js','server/routes/crm.js','server/routes/crm_v8_extension.js','server/routes/crm_budget_extension.js','server/routes/crm_mail_extension.js','server/routes/crm_imap_extension.js','server/services/activity-workflow.js',
  'database/001_users.sql','database/002_sessions.sql','database/migrations/001_base.js','database/migrations/002_v8.js','database/migrations/003_v8_lookup_indexes.js','database/migrations/004_legacy_v8_transition.js','ops/legacy-transition.js','ops/legacy-v8-profile.json','ops/data-audit.js','ops/legacy-transition-guards.sql','ops/schema-values.js','ops/schema-diagnostics.sql','ops/schema-contract.json','ops/schema.js','ops/database.js','ops/sql-mode.js','ops/deploy.js','ops/pm2-control.js'];
-required.push('server/services/work-queues.js','server/routes/work-queues.js','database/migrations/005_daily_work_queues.js');
 const flags=new Set(['env','host','database','root','control','revision','backup','dump-command','client-command','maintenance-confirmed','offline','restored','diagnostics']);
 function args(argv){
  const [command,...rest]=argv, out={command};
@@ -34,13 +33,14 @@ function run(cmd,argv,options={}){
  return result.stdout;
 }
 function inventory(revision){
+ const releaseRequired=required.concat(['server/services/work-queues.js','server/routes/work-queues.js','database/migrations/005_daily_work_queues.js']);
  const head=run('git',['rev-parse','HEAD']).trim();
  if(revision!==head||!/^[a-f0-9]{40}$/.test(revision))throw Error('--revision peab võrduma checkout HEAD täieliku commit SHA-ga.');
  if(run('git',['status','--porcelain','--untracked-files=no']).trim())throw Error('Checkout sisaldab commit’imata muudatusi.');
  const files=new Set(run('git',['ls-tree','-r','--name-only',head]).trim().split('\n'));
- const missing=required.filter(f=>!files.has(f)||!fs.existsSync(path.join(source,f)));
+ const missing=releaseRequired.filter(f=>!files.has(f)||!fs.existsSync(path.join(source,f)));
  if(missing.length)throw Error('Väljalaskest puuduvad failid: '+missing.join(', '));
- return {revision:head,trackedFiles:files.size,requiredFiles:required.length};
+ return {revision:head,trackedFiles:files.size,requiredFiles:releaseRequired.length};
 }
 function syncPath(file){const fd=fs.openSync(file,'r');try{fs.fsyncSync(fd);}finally{fs.closeSync(fd);}}
 function privateDir(dir){

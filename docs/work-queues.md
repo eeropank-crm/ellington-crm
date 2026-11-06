@@ -109,3 +109,10 @@ Ekraanipildid:
 - [Jätkamist ootavate klientide valitud tegevused](work-queues/continuation.png)
 - [Administraatori ülevaade](work-queues/admin.png)
 - [Mobiilne vaade](work-queues/mobile.png)
+
+
+Koos seotud skeemi-, pärandskeemi ülemineku-, paigalduse/taastamise ja
+kasutajaõiguste regressioonidega: **40 läbitud, 0 ebaõnnestunud, 0 vahele jäetud**,
+väljumiskood 0. Varasemat 39 testi komplekti tervikuna ei korratud. Kontrolliti
+ainult uue migratsiooni ja tööjärjekordadega seotud olemasolevaid komplekte ning
+12 uut testi. Migratsioonid 001–004 ja sõltuvuste failid on muutmata.
