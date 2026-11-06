@@ -30,10 +30,11 @@ module.exports = function(db) {
       const purpose=clean(t.purpose,200),body=clean(t.body,10000),subject=clean(t.subject,500);
       if(!TYPES.includes(t.type)||!purpose||purpose.length>200||!body||body.length>10000||(t.type==='E-kiri'&&!subject)||(subject.length>500))return res.status(400).json({error:'Täida eesmärk, juhis ja e-kirja puhul pealkiri.'});
       if(t.nextStep!=null && JSON.stringify(t.nextStep).length>10000)return res.status(400).json({error:'Järeltegevuste ahel on liiga pikk.'});
-      const next=t.nextStep?.type || t.next || null, days=t.nextStep?.days || t.days || null;
+      let nextStep;try{nextStep=w.chain(t.nextStep);}catch(e){if(e instanceof w.WorkflowError)return res.status(e.status).json({error:e.message});throw e;}
+      const next=nextStep?.type || t.next || null, days=nextStep?.days || t.days || null;
       if(next!=null&&!TYPES.includes(next))return res.status(400).json({error:'Vigane järgmine tegevus.'});
       if(next!=null&&(!Number.isInteger(Number(days))||Number(days)<1||Number(days)>3650))return res.status(400).json({error:'Vigane järeltegevuse tähtaeg.'});
-      const value={name:purpose,purpose,type:t.type,subject:t.type==='E-kiri'?subject:'',body,next_type:next,next_days:next?Number(days):null,next_step_json:t.nextStep?JSON.stringify(t.nextStep):null,is_active:1,updated_at:db.fn.now()};
+      const value={name:purpose,purpose,type:t.type,subject:t.type==='E-kiri'?subject:'',body,next_type:next,next_days:next?Number(days):null,next_step_json:nextStep?JSON.stringify(nextStep):null,is_active:1,updated_at:db.fn.now()};
       let id;
       if(t.id!=null){id=Number(t.id);if(!Number.isSafeInteger(id)||id<1)return res.status(400).json({error:'Vigane malli ID.'});const updated=await db('crm_templates').where({id}).update(value);if(!updated)return res.status(404).json({error:'Malli ei leitud.'});}
       else {[id]=await db('crm_templates').insert({...value,created_at:db.fn.now()});}

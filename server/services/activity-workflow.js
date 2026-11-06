@@ -44,6 +44,37 @@ async function planned(trx,x) {
   return {purpose,instructions,subject,template_id:tpl.id,next_step_json:tpl.next_step_json||null};
 }
 async function completionEvent(trx,id) { return trx('crm_v8_activity_events').where({activity_id:id}).whereIn('event_type',['completed_default_followup','completed','completed_and_stopped']).orderBy('id','desc').first(); }
+function chain(value,depth=0) {
+  if(value==null||value==='') return null;
+  if(typeof value==='string'){try{value=JSON.parse(value);}catch{fail(400,'Malli järeltegevuste ahel vajab parandamist.');}}
+  if(value==null) return null;
+  if(!value||typeof value!=='object'||Array.isArray(value)||depth>=20||!TYPES.includes(value.type)) fail(400,'Malli järeltegevuste ahel vajab parandamist.');
+  const days=Number(value.days);
+  if(!Number.isInteger(days)||days<1||days>3650) fail(400,'Kontrolli malli järeltegevuse tööpäevade arvu.');
+  const purpose=text(value.purpose,200,'järeltegevuse eesmärk',1),subject=text(value.subject,500,'järelkirja pealkiri'),body=text(value.body,10000,'järeltegevuse sisu');
+  if(value.type==='E-kiri'&&(!subject||!body)) fail(400,'Malli järelkirjal peab olema pealkiri ja sisu.');
+  return {type:value.type,purpose,subject:value.type==='E-kiri'?subject:'',body,days,nextStep:chain(value.nextStep,depth+1)};
+}
+function businessDate(day,days) {
+  if(!validDate(day)||!Number.isInteger(days)||days<1||days>3650) fail(400,'Vigane järeltegevuse tähtaeg.');
+  const d=new Date(day+'T12:00:00Z');
+  for(let left=days;left>0;){d.setUTCDate(d.getUTCDate()+1);if(![0,6].includes(d.getUTCDay()))left--;}
+  return d.toISOString().slice(0,10);
+}
+async function embedded(trx,id,d) {
+  if(!d||d.template_id!=null) return false;
+  const created=await trx('crm_v8_activity_events').where({activity_id:id,event_type:'created_default_followup'}).forUpdate().first('details');
+  return parse(created?.details).embedded_template===true;
+}
+async function followupPlan(trx,a,d,day=today()) {
+  let raw=d?.next_step_json;
+  // Previously created root activities may predate the template's chain.
+  if(!raw&&d?.template_id){const t=await trx('crm_templates').where({id:d.template_id,is_active:1}).first('next_step_json');raw=t?.next_step_json;}
+  const step=chain(raw);
+  if(step) return {source:'template',type:step.type,due_date:businessDate(day,step.days),template_id:null,purpose:step.purpose,subject:step.subject,instructions:step.body,next_step_json:step.nextStep?JSON.stringify(step.nextStep):null,embedded_template:true};
+  const date=new Date(day+'T12:00:00Z');date.setUTCDate(date.getUTCDate()+14);
+  return {source:'fallback',type:a.type,due_date:date.toISOString().slice(0,10),template_id:d?.template_id||null,purpose:d?.purpose||'Kontroll',instructions:d?.instructions||'',subject:d?.subject||'',next_step_json:null,embedded_template:await embedded(trx,a.id,d)};
+}
 async function complete(trx,id,user,x={}) {
   const {activity:a,client:c}=await lockActivity(trx,id,user);
   if(a.status!=='active') {
@@ -65,15 +96,15 @@ async function complete(trx,id,user,x={}) {
     outcome='done'; comment='Saadetud e-kiri: '+sent.subject+'\nSaaja: '+sent.recipient+'\n\n'+sent.body;
   }
   const d=await trx('crm_activity_details').where({activity_id:id}).first();
-  const date=new Date(today()+'T12:00:00Z'); date.setUTCDate(date.getUTCDate()+14); const due=date.toISOString().slice(0,10);
+  const next=await followupPlan(trx,a,d),due=next.due_date;
   await trx('crm_activities').where({id}).update({status:'completed',updated_at:trx.fn.now()});
   const performed=outcome==='done';
   if(performed) await trx('crm_clients').where({id:c.id}).update({followup_count:trx.raw('COALESCE(followup_count, 0) + 1'),updated_at:trx.fn.now()});
-  const [nextId]=await trx('crm_activities').insert({client_id:c.id,contact_id:a.contact_id,owner_user_id:c.owner_user_id,type:a.type,status:'active',due_date:due,notes:a.notes,sequence_number:Number(a.sequence_number||0)+(performed?1:0)});
-  await trx('crm_activity_details').insert({activity_id:nextId,template_id:d?.template_id||null,purpose:d?.purpose||'Kontroll',instructions:d?.instructions||'',subject:d?.subject||'',next_step_json:d?.next_step_json||null});
-  const details={outcome,comment,next_activity_id:nextId,due_date:due,default_followup:true};
+  const [nextId]=await trx('crm_activities').insert({client_id:c.id,contact_id:sent?.contact_id||a.contact_id,owner_user_id:c.owner_user_id,type:next.type,status:'active',due_date:due,notes:next.source==='template'?next.instructions.slice(0,5000)||null:a.notes,sequence_number:Number(a.sequence_number||0)+(performed?1:0)});
+  await trx('crm_activity_details').insert({activity_id:nextId,template_id:next.template_id,purpose:next.purpose,instructions:next.instructions,subject:next.subject,next_step_json:next.next_step_json});
+  const details={outcome,comment,next_activity_id:nextId,due_date:due,default_followup:true,followup_source:next.source,followup:{type:next.type,purpose:next.purpose,subject:next.subject,instructions:next.instructions}};
   await event(trx,id,user,'completed_default_followup',details);
-  await event(trx,nextId,user,'created_default_followup',{previous_activity_id:id});
+  await event(trx,nextId,user,'created_default_followup',{previous_activity_id:id,followup_source:next.source,embedded_template:next.embedded_template});
   await replies(trx,c.id,x.reply_ids,user,id,'completed');
   return {completed:true,...details};
 }
@@ -169,4 +200,4 @@ async function edit(trx,id,user,x={}) {
   await event(trx,id,user,'activity_edited',audit);
   return {updated:true,...await editable(trx,id,user)};
 }
-module.exports={WorkflowError,TYPES,today,dateOnly,validDate,parse,text,event,allowed,lockClient,lockActivity,validateReplies,replies,planned,complete,stop,selectNext,postpone,create,editable,edit};
+module.exports={WorkflowError,TYPES,today,dateOnly,validDate,parse,text,event,allowed,lockClient,lockActivity,validateReplies,replies,planned,complete,stop,selectNext,postpone,create,editable,edit,chain,businessDate,embedded,followupPlan};

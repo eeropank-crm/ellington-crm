@@ -17,7 +17,7 @@ module.exports=function(db,options={}){
  r.patch('/admin/users-real/:id',async(req,res,next)=>{try{if(!admin(req,res))return;const id=Number(req.params.id);if(!goodId(id))return res.status(400).json({error:'Vigane kasutaja.'});const u=await db('users').where({id}).first();if(!u)return res.status(404).json({error:'Kasutajat ei leitud.'});const x=req.body||{};if(x.action==='password'){if(typeof x.password!=='string'||x.password.length<12||x.password.length>128)return res.status(400).json({error:'Parool peab olema vähemalt 12 märki.'});await db('users').where({id}).update({password_hash:await bcrypt.hash(x.password,12),updated_at:db.fn.now()});}
  else if(x.action==='active'){if(id===Number(req.crmUser.id)&&!x.active)return res.status(400).json({error:'Enda kontot ei saa peatada.'});if(x.active!==true&&x.active!==false)return res.status(400).json({error:'Vigane olek.'});if(!x.active&&u.role==='admin'){const n=await db('users').where({role:'admin',is_active:1}).count('* as n').first();if(Number(n.n)<=1)return res.status(409).json({error:'Viimast administraatorit ei saa peatada.'});}await db('users').where({id}).update({is_active:x.active?1:0,updated_at:db.fn.now()});}
  else return res.status(400).json({error:'Tundmatu toiming.'});res.json({ok:true});}catch(e){next(e)}});
- r.get('/mail/activity/:id',async(req,res,next)=>{try{const id=Number(req.params.id);if(!goodId(id))return res.status(400).json({error:'Vigane tegevus.'});const a=await db('crm_activities as a').leftJoin('crm_activity_details as d','d.activity_id','a.id').where('a.id',id).first('a.id','a.client_id','a.contact_id','a.owner_user_id','a.type','a.status','d.subject','d.instructions','d.purpose','d.template_id');if(!a)return res.status(404).json({error:'Tegevust ei leitud.'});if(a.owner_user_id!=req.crmUser.id)return res.status(403).json({error:'See tegevus ei kuulu sulle.'});if(a.type!=='E-kiri')return res.status(400).json({error:'See pole e-kirja tegevus.'});const contacts=await db('crm_contacts').where({client_id:a.client_id}).whereNotNull('email').select('id','name','email');const log=await db('crm_email_outbox').where({activity_id:id}).first('id','status','sent_at','recipient');res.json({activity:a,contacts,send:log||null,configured:!!mailConfig(req.crmUser.id)});}catch(e){next(e)}});
+ r.get('/mail/activity/:id',async(req,res,next)=>{try{const id=Number(req.params.id);if(!goodId(id))return res.status(400).json({error:'Vigane tegevus.'});const a=await db('crm_activities as a').leftJoin('crm_activity_details as d','d.activity_id','a.id').where('a.id',id).first('a.id','a.client_id','a.contact_id','a.owner_user_id','a.type','a.status','d.subject','d.instructions','d.purpose','d.template_id');if(!a)return res.status(404).json({error:'Tegevust ei leitud.'});if(a.owner_user_id!=req.crmUser.id)return res.status(403).json({error:'See tegevus ei kuulu sulle.'});if(a.type!=='E-kiri')return res.status(400).json({error:'See pole e-kirja tegevus.'});const contacts=await db('crm_contacts').where({client_id:a.client_id}).whereNotNull('email').select('id','name','email');const log=await db('crm_email_outbox').where({activity_id:id}).first('id','status','sent_at','recipient');res.json({activity:a,contacts,send:log||null,embedded_template:await workflow.embedded(db,id,a),configured:!!mailConfig(req.crmUser.id)});}catch(e){next(e)}});
  r.post('/mail/activity/:id/send',async(req,res,next)=>{try{
  const id=Number(req.params.id),x=req.body||{};if(!goodId(id)||!goodId(x.contact_id))return res.status(400).json({error:'Vali kontaktisik.'});
  const subject=typeof x.subject==='string'?x.subject.trim():'',body=typeof x.body==='string'?x.body.trim():'';
@@ -30,12 +30,21 @@ module.exports=function(db,options={}){
  if(locked.client.stop_reason)return {error:'Kliendi jälgimine on lõpetatud.',status:409};if(!a)return {error:'Tegevust ei leitud.',status:404};if(a.owner_user_id!=req.crmUser.id)return {error:'Tegevus ei kuulu sulle.',status:403};if(a.type!=='E-kiri'||a.status!=='active')return {error:'Tegevus pole aktiivne e-kiri.',status:409};
  if(!config)return {error:'Sinu CRM-i postkast pole veel seadistatud.',status:409};
  const contact=await trx('crm_contacts').where({id:Number(x.contact_id),client_id:a.client_id}).first();if(!contact)return {error:'Valitud kontaktisikut ei leitud.',status:400};
- const old=await trx('crm_email_outbox').where({activity_id:id}).first();if(old)return {error:'Selle tegevuse saatmine on juba registreeritud ('+old.status+'). Topeltsaatmise vältimiseks kontrolli ajalugu.',status:409};
- const tpl=await trx('crm_templates').where({id:Number(x.template_id)||0,type:'E-kiri',is_active:1}).first();
- if(!tpl||x.purpose!==(tpl.purpose||tpl.name))return {error:'Vali e-kirja eesmärk rippmenüüst.',status:400};
+ const old=await trx('crm_email_outbox').where({activity_id:id}).forUpdate().first();if(old)return {error:'Selle tegevuse saatmine on juba registreeritud ('+old.status+'). Topeltsaatmise vältimiseks kontrolli ajalugu.',status:409};
+ const detail=await trx('crm_activity_details').where({activity_id:id}).forUpdate().first();
+ let selected;
+ if(x.template_id==null&&await workflow.embedded(trx,id,detail)&&x.purpose===detail.purpose){
+  selected={template_id:null,purpose:detail.purpose,next_step_json:detail.next_step_json||null};
+ }else{
+  const tpl=await trx('crm_templates').where({id:Number(x.template_id)||0,type:'E-kiri',is_active:1}).first();
+  if(!tpl||x.purpose!==(tpl.purpose||tpl.name))return {error:'Vali e-kirja eesmärk rippmenüüst.',status:400};
+  selected={template_id:tpl.id,purpose:tpl.purpose||tpl.name,next_step_json:tpl.next_step_json||null};
+ }
+ // Reject a malformed chain before reserving or contacting SMTP.
+ await workflow.followupPlan(trx,a,{...selected,instructions:body,subject});
  await workflow.validateReplies(trx,a.client_id,x.reply_ids);
  const messageId='<crm-'+id+'-'+crypto.randomUUID()+'@ellington.ee>';
- await trx('crm_email_outbox').insert({activity_id:id,client_id:a.client_id,contact_id:contact.id,user_id:req.crmUser.id,sender:config.address,recipient,subject,body,message_id:messageId,status:'sending',created_at:trx.fn.now()});await workflow.event(trx,id,req.crmUser,'mail_sending_reserved',{});return {recipient,messageId,next_step_json:tpl.next_step_json||null,purpose:tpl.purpose||tpl.name,template_id:tpl.id};
+ await trx('crm_email_outbox').insert({activity_id:id,client_id:a.client_id,contact_id:contact.id,user_id:req.crmUser.id,sender:config.address,recipient,subject,body,message_id:messageId,status:'sending',created_at:trx.fn.now()});await workflow.event(trx,id,req.crmUser,'mail_sending_reserved',{});return {recipient,messageId,...selected};
  });if(reserved.error)return res.status(reserved.status).json({error:reserved.error});
  const port=config.smtp.port;
  let info;
