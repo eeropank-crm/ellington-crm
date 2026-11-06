@@ -99,6 +99,7 @@ failist, vältides varasemate PM2 keskkonnaväärtuste allesjäämist.
 
 Olulisemad veakoodid: `ACCOUNT_NOT_READY` tähendab, et kontode ID-d,
 sisselogimisaadressid või aktiivsus ei vasta kinnitatud jaotusele;
+`MAILBOX_CONFLICT` tähendab teise aktiivse kontoga kattuvat postkasti.
 `SMTP_AUTH_2/3` või `IMAP_AUTH_2/3` tähendab vastava kasutaja ühenduse kontrolli
 nurjumist. Nende vigade korral .env ei muutu. `ENV_CHANGED` tähendab samaaegset
 muudatust; teise protsessi muudatust ei kirjutata üle. Faili kirjutamise või
@@ -111,14 +112,21 @@ kirjade saatmine ega vastustele vastamine.
 ## Kontrollid
 
 Ainult kohalik MariaDB 11.4.13, sünteetilised kontod/sõnumid, võltsitud SMTP-
-ja IMAP-kliendid ning ajutised testkonfiguratsioonid. 12 sihitud testi
+ja IMAP-kliendid ning ajutised testkonfiguratsioonid. 13 sihitud testi
 kontrollivad postkastide eraldatust, eri hostide eelistust, aktiivsust, ranget
 vastuse seostamist, kordusimpordi tõket, inimese muudetud või üle antud töö
 säilimist, Unicode'i salvestamist, ühe postkasti tõrke eraldamist,
 administraatori õigusi, SMTP topeltsaatmise tõket ning konfiguratsiooni
-privaatset varundamist ja kontrollimist enne kirjutamist.
+privaatset varundamist ja kontrollimist enne kirjutamist, sümbollingi säilimist ja teiste aktiivsete postkastide konflikti tõket.
 
 Päris SMTP/IMAP-serveritega ei ühendutud, Zone.ee faile/protsesse/andmeid ei
 muudetud ning päris kirju ei saadetud. Tegelikud postkastide paroolid ja nende
 toimimine pole Codexis kontrollitud: selleks on ülaltoodud serveris käivitatav
 verify-kontroll, mis ei saada kirja.
+
+
+Koos seotud CRM-i tegevuste, kasutajaõiguste ja tööjärjekordade kontrollidega:
+**40 testi läbitud, 0 ebaõnnestunud, 0 vahele jäetud**, väljumiskood 0.
+Need on 13 uut postkastitesti ja 27 seotud regressiooni, mitte senise
+paigaldus-/SQL-režiimi komplekti terviklik kordus. Andmebaasimigratsioone,
+sõltuvuste faile ja olemasolevaid sisselogimiskontosid selle parandusega ei muudeta.

@@ -112,8 +112,9 @@ test('credential setup verifies first, preserves existing settings and backs up 
  const dir=fs.mkdtempSync(path.join(os.tmpdir(),'ellington-mailbox-test-')),file=path.join(dir,'.env');t.after(()=>fs.rmSync(dir,{recursive:true,force:true}));
  const original='DB_HOST=localhost\nDB_NAME=d24248_ellingtoncrm\nSESSION_SECRET="SYNTHETIC_SESSION"\nCRM_MAILBOX_1=original@example.invalid\nCRM_MAIL_PASSWORD_1="UNCHANGED"\nCRM_IMAP_ENABLED=0\n';fs.writeFileSync(file,original,{mode:0o600});
  const passwords={2:'synthetic # " quote \\ password',3:"synthetic ' single quote password"};let verified=[];
- const result=await setup.configure(file,passwords,{checkUsers:async(env,staff)=>{assert.equal(staff[0].login,'indrek@ellington.ee');assert.equal(staff[1].login,'palme@ellington.ee');},verify:async(id,env)=>{verified.push(id);assert.equal(env['CRM_MAIL_PASSWORD_'+id],passwords[id]);assert.equal(fs.readFileSync(file,'utf8'),original);}});
- const next=require('dotenv').parse(fs.readFileSync(file));assert.deepEqual(verified,[2,3]);assert.equal(next.CRM_MAILBOX_2,'indrek.mae@ellington.ee');assert.equal(next.CRM_MAILBOX_3,'palme.kaggovere@ellington.ee');assert.equal(next.CRM_MAIL_PASSWORD_2,passwords[2]);assert.equal(next.CRM_MAIL_PASSWORD_1,'UNCHANGED');assert.equal(next.CRM_IMAP_ENABLED,'0');assert.equal(next.CRM_IMAP_ENABLED_2,'1');assert.equal(fs.readFileSync(result.backup,'utf8'),original);assert.equal(fs.statSync(file).mode&0o777,0o600);assert.equal(JSON.stringify(result).includes(passwords[2]),false);
+ const link=path.join(dir,'release.env');fs.symlinkSync(file,link);
+ const result=await setup.configure(link,passwords,{checkUsers:async(env,staff)=>{assert.equal(staff[0].login,'indrek@ellington.ee');assert.equal(staff[1].login,'palme@ellington.ee');},verify:async(id,env)=>{verified.push(id);assert.equal(env['CRM_MAIL_PASSWORD_'+id],passwords[id]);assert.equal(fs.readFileSync(file,'utf8'),original);}});
+ const next=require('dotenv').parse(fs.readFileSync(file));assert.deepEqual(verified,[2,3]);assert.equal(fs.lstatSync(link).isSymbolicLink(),true);assert.equal(next.CRM_MAILBOX_2,'indrek.mae@ellington.ee');assert.equal(next.CRM_MAILBOX_3,'palme.kaggovere@ellington.ee');assert.equal(next.CRM_MAIL_PASSWORD_2,passwords[2]);assert.equal(next.CRM_MAIL_PASSWORD_1,'UNCHANGED');assert.equal(next.CRM_IMAP_ENABLED,'0');assert.equal(next.CRM_IMAP_ENABLED_2,'1');assert.equal(fs.readFileSync(result.backup,'utf8'),original);assert.equal(fs.statSync(file).mode&0o777,0o600);assert.equal(JSON.stringify(result).includes(passwords[2]),false);
 });
 test('failed verification or a concurrent env edit cannot overwrite the configuration',async t=>{
  const dir=fs.mkdtempSync(path.join(os.tmpdir(),'ellington-mailbox-failure-')),file=path.join(dir,'.env');t.after(()=>fs.rmSync(dir,{recursive:true,force:true}));fs.writeFileSync(file,'SESSION_SECRET=before\n',{mode:0o600});const passwords={2:secret,3:secret};
@@ -132,4 +133,13 @@ test('polling remains bounded to the newest 250 messages',async()=>{
  list[0]=reply(item,'oldest');list[250]=reply(item,'newest');messages=new Map([[address,list]]);
  const result=await sync.sync();assert.equal(result.scanned,250);assert.equal(result.imported,1);
  assert.equal(await db('crm_email_inbox').where({mailbox_user_id:users[1].id,message_id:'<'+list[0].messageId+'>'}).first(),undefined);
+});
+
+test('setup checks the confirmed account identities and prevents colliding with another active mailbox',()=>{
+ const rows=[{id:1,email:'old-login@example.invalid',is_active:1},{id:2,email:'indrek@ellington.ee',is_active:1},{id:3,email:'palme@ellington.ee',is_active:1}];
+ assert.doesNotThrow(()=>setup.validateAccounts(rows,{}));
+ assert.throws(()=>setup.validateAccounts(rows.map(r=>r.id===2?{...r,email:'wrong@example.invalid'}:r),{}),/ACCOUNT_NOT_READY/);
+ assert.throws(()=>setup.validateAccounts(rows.map(r=>r.id===3?{...r,is_active:0}:r),{}),/ACCOUNT_NOT_READY/);
+ const conflict={CRM_IMAP_ENABLED:'1',CRM_IMAP_HOST:'imap.zone.eu',CRM_MAILBOX_1:'INDREK.MAE@ELLINGTON.EE',CRM_MAIL_PASSWORD_1:secret};
+ assert.throws(()=>setup.validateAccounts(rows,conflict),/MAILBOX_CONFLICT/);
 });

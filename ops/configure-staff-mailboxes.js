@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 'use strict';
-const {configure}=require('./staff-mailbox-settings');
+const {configure,validateAccounts}=require('./staff-mailbox-settings');
 const mailboxes=require('../server/services/mailboxes');
 const fs=require('node:fs'),path=require('node:path');
 process.umask(0o077);
@@ -8,8 +8,8 @@ async function checkUsers(env,staff){
  if(env.DB_HOST!=='localhost'||env.DB_NAME!=='d24248_ellingtoncrm')throw Error('DATABASE_IDENTITY');
  const db=await require('mysql2/promise').createConnection({host:env.DB_HOST,port:Number(env.DB_PORT||3306),user:env.DB_USER,password:env.DB_PASSWORD,database:env.DB_NAME,connectTimeout:10000});
  try{
-  const [rows]=await db.execute('SELECT id,email,is_active FROM users WHERE id IN (?,?)',staff.map(u=>u.id));
-  if(rows.length!==staff.length||staff.some(u=>!rows.some(r=>Number(r.id)===u.id&&r.email===u.login&&Number(r.is_active)===1)))throw Error('ACCOUNT_NOT_READY');
+  const [rows]=await db.execute('SELECT id,email,is_active FROM users');
+  validateAccounts(rows,env);
  }finally{await db.end();}
 }
 async function verify(id,env){
@@ -29,6 +29,6 @@ async function verify(id,env){
  const result=await configure(args[1],{2:process.env.ELLINGTON_SETUP_PASSWORD_2,3:process.env.ELLINGTON_SETUP_PASSWORD_3},{checkUsers,verify});
  console.log(JSON.stringify(result,null,2));
 })().catch(error=>{
- const allowed=['RELEASE_NOT_ACTIVE','ENV_IDENTITY','PASSWORD_REQUIRED','ENV_ENCODING','ENV_PERMISSIONS','ENV_CHANGED','WRITE_VERIFICATION','BACKUP_FAILED','DATABASE_IDENTITY','ACCOUNT_NOT_READY','ARGUMENTS','SMTP_AUTH_2','SMTP_AUTH_3','IMAP_AUTH_2','IMAP_AUTH_3'];
+ const allowed=['RELEASE_NOT_ACTIVE','ENV_IDENTITY','PASSWORD_REQUIRED','ENV_ENCODING','ENV_PERMISSIONS','ENV_CHANGED','WRITE_VERIFICATION','BACKUP_FAILED','DATABASE_IDENTITY','ACCOUNT_NOT_READY','MAILBOX_CONFLICT','ARGUMENTS','SMTP_AUTH_2','SMTP_AUTH_3','IMAP_AUTH_2','IMAP_AUTH_3'];
  console.error(JSON.stringify({ok:false,code:allowed.includes(error.message)?error.message:'SETUP_FAILED',testEmailSent:false}));process.exitCode=1;
 });

@@ -1,8 +1,19 @@
 'use strict';
 const fs=require('node:fs'),path=require('node:path'),crypto=require('node:crypto');
 const dotenv=require('dotenv');
+const mailboxes=require('../server/services/mailboxes');
 const staff=[{id:2,login:'indrek@ellington.ee',mailbox:'indrek.mae@ellington.ee'},{id:3,login:'palme@ellington.ee',mailbox:'palme.kaggovere@ellington.ee'}];
 const hash=b=>crypto.createHash('sha256').update(b).digest('hex');
+function validateAccounts(rows,env){
+ if(staff.some(u=>!rows.some(r=>Number(r.id)===u.id&&r.email===u.login&&Number(r.is_active)===1)))throw Error('ACCOUNT_NOT_READY');
+ const used=new Set();
+ for(const user of rows.filter(r=>Number(r.is_active)===1)){
+  const fixed=staff.find(s=>s.id===Number(user.id)),config=mailboxes.settings(user.id,env);
+  const address=fixed?.mailbox||(config.enabled&&config.imap?config.address:null);
+  if(!address)continue;
+  const key=address.toLowerCase();if(used.has(key))throw Error('MAILBOX_CONFLICT');used.add(key);
+ }
+}
 function encoded(value){
  for(const candidate of [JSON.stringify(value),"'"+value+"'",'`'+value+'`','"'+value+'"']){
   if(dotenv.parse('VALUE='+candidate).VALUE===value)return candidate;
@@ -48,4 +59,4 @@ async function configure(file,passwords,{checkUsers,verify}={}){
  }finally{try{fs.unlinkSync(temp);}catch(e){if(e.code!=='ENOENT')throw e;}}
  return {ok:true,backup,users:staff.map(u=>({userId:u.id,login:u.login,mailbox:u.mailbox,credentialsVerified:true})),restartRequired:true,testEmailSent:false};
 }
-module.exports={staff,additions,compose,configure};
+module.exports={staff,additions,compose,configure,validateAccounts};
