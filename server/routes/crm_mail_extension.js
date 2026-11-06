@@ -4,18 +4,14 @@ const bcrypt=require('bcryptjs');
 const nodemailer=require('nodemailer');
 const crypto=require('crypto');
 const workflow=require('../services/activity-workflow');
+const mailboxes=require('../services/mailboxes');
 module.exports=function(db,options={}){
  const r=express.Router();
  const admin=(req,res)=>req.crmUser.role==='admin'||(res.status(403).json({error:'Ainult administraatorile.'}),false);
  const goodId=x=>Number.isSafeInteger(Number(x))&&Number(x)>0;
- const mailConfig=id=>{
-   const address=process.env['CRM_MAILBOX_'+id];
-   const password=process.env['CRM_MAIL_PASSWORD_'+id];
-   if(!address||!password||!process.env.CRM_SMTP_HOST) return null;
-   return {address,password};
- };
- r.get('/mail/status',async(req,res,next)=>{try{const c=mailConfig(req.crmUser.id);res.json({configured:!!c,address:c?.address||null});}catch(e){next(e)}});
- r.get('/admin/users-real',async(req,res,next)=>{try{if(!admin(req,res))return;const users=await db('users').select('id','name','email','role','is_active').orderBy('id');res.json({users:users.map(u=>({...u,mailbox:process.env['CRM_MAILBOX_'+u.id]||null,mail_configured:!!mailConfig(u.id)}))});}catch(e){next(e)}});
+ const mailConfig=id=>{const s=mailboxes.settings(id,options.env||process.env);return s.smtp?s:null;};
+ r.get('/mail/status',async(req,res,next)=>{try{const c=mailConfig(req.crmUser.id);res.json({configured:!!c,address:c?.address||null,...mailboxes.status(req.crmUser.id,options.env||process.env)});}catch(e){next(e)}});
+ r.get('/admin/users-real',async(req,res,next)=>{try{if(!admin(req,res))return;const users=await db('users').select('id','name','email','role','is_active').orderBy('id');res.json({users:users.map(u=>({...u,mailbox:mailboxes.status(u.id,options.env||process.env).address,mail_configured:!!mailConfig(u.id),imap_configured:mailboxes.status(u.id,options.env||process.env).imap_configured,imap_enabled:mailboxes.status(u.id,options.env||process.env).imap_enabled}))});}catch(e){next(e)}});
  r.post('/admin/users-real',async(req,res,next)=>{try{if(!admin(req,res))return;const {name,email,password,role}=req.body||{};if(typeof name!=='string'||name.trim().length<2||name.length>150||typeof email!=='string'||!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)||email.length>255||!['sales','admin'].includes(role)||typeof password!=='string'||password.length<12||password.length>128)return res.status(400).json({error:'Sisesta nimi, korrektne e-post, roll ja vähemalt 12-märgiline parool.'});const exists=await db('users').where({email:email.trim().toLowerCase()}).first('id');if(exists)return res.status(409).json({error:'See e-posti aadress on juba kasutusel.'});const [id]=await db('users').insert({name:name.trim(),email:email.trim().toLowerCase(),password_hash:await bcrypt.hash(password,12),role,is_active:1});res.json({id});}catch(e){next(e)}});
  r.patch('/admin/users-real/:id',async(req,res,next)=>{try{if(!admin(req,res))return;const id=Number(req.params.id);if(!goodId(id))return res.status(400).json({error:'Vigane kasutaja.'});const u=await db('users').where({id}).first();if(!u)return res.status(404).json({error:'Kasutajat ei leitud.'});const x=req.body||{};if(x.action==='password'){if(typeof x.password!=='string'||x.password.length<12||x.password.length>128)return res.status(400).json({error:'Parool peab olema vähemalt 12 märki.'});await db('users').where({id}).update({password_hash:await bcrypt.hash(x.password,12),updated_at:db.fn.now()});}
  else if(x.action==='active'){if(id===Number(req.crmUser.id)&&!x.active)return res.status(400).json({error:'Enda kontot ei saa peatada.'});if(x.active!==true&&x.active!==false)return res.status(400).json({error:'Vigane olek.'});if(!x.active&&u.role==='admin'){const n=await db('users').where({role:'admin',is_active:1}).count('* as n').first();if(Number(n.n)<=1)return res.status(409).json({error:'Viimast administraatorit ei saa peatada.'});}await db('users').where({id}).update({is_active:x.active?1:0,updated_at:db.fn.now()});}
@@ -40,17 +36,17 @@ module.exports=function(db,options={}){
  const messageId='<crm-'+id+'-'+crypto.randomUUID()+'@ellington.ee>';
  await trx('crm_email_outbox').insert({activity_id:id,client_id:a.client_id,contact_id:contact.id,user_id:req.crmUser.id,sender:config.address,recipient,subject,body,message_id:messageId,status:'sending',created_at:trx.fn.now()});await workflow.event(trx,id,req.crmUser,'mail_sending_reserved',{});return {recipient,messageId,next_step_json:tpl.next_step_json||null,purpose:tpl.purpose||tpl.name,template_id:tpl.id};
  });if(reserved.error)return res.status(reserved.status).json({error:reserved.error});
- const port=Number(process.env.CRM_SMTP_PORT||465);
+ const port=config.smtp.port;
  let info;
  try {
    if(!Number.isInteger(port)||port<1||port>65535)throw Error('Vigane SMTP port.');
-   const transport=(options.createTransport||nodemailer.createTransport)({host:process.env.CRM_SMTP_HOST,port,secure:port===465,auth:{user:config.address,pass:config.password},requireTLS:port!==465,tls:{minVersion:'TLSv1.2'},connectionTimeout:12000,greetingTimeout:12000,socketTimeout:20000});
+   const transport=(options.createTransport||nodemailer.createTransport)({host:config.smtp.host,port,secure:config.smtp.secure,auth:{user:config.address,pass:config.password},requireTLS:port!==465,tls:{minVersion:'TLSv1.2',rejectUnauthorized:true},connectionTimeout:12000,greetingTimeout:12000,socketTimeout:20000});
    try {
      info=await transport.sendMail({from:{name:req.crmUser.name+' | Ellington',address:config.address},to:reserved.recipient,subject,text:body,messageId:reserved.messageId,replyTo:config.address});
      if(!Array.isArray(info.accepted)||!info.accepted.some(a=>String(a).toLowerCase()===reserved.recipient.toLowerCase()))throw Error('SMTP ei kinnitanud saaja vastuvõtmist.');
    } finally { if(typeof transport.close==='function')transport.close(); }
  } catch(e) {
-   await db('crm_email_outbox').where({activity_id:id}).update({status:'uncertain',smtp_response:String(e.message||e).slice(0,1000)});
+   await db('crm_email_outbox').where({activity_id:id}).update({status:'uncertain',smtp_response:'Saatmist ei õnnestunud kinnitada.'});
    return res.status(502).json({error:'Saatmist ei õnnestunud kinnitada. Topeltsaatmise vältimiseks kontrolli postkasti ja pöördu administraatori poole. Tegevus jäi aktiivseks.'});
  }
  try {

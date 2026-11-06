@@ -1,89 +1,21 @@
 'use strict';
 const express = require('express');
 const workflow = require('../services/activity-workflow');
-const { ImapFlow } = require('imapflow');
-const { simpleParser } = require('mailparser');
+const mailboxes=require('../services/mailboxes');
+const createSync=require('../services/mailbox-sync');
+const isId=v=>Number.isSafeInteger(Number(v))&&Number(v)>0;
 
-const normalizeId = v => String(v || '').trim().replace(/^<|>$/g, '').toLowerCase();
-const email = v => String(v || '').trim().toLowerCase();
-const isId = v => Number.isSafeInteger(Number(v)) && Number(v) > 0;
-const quote = v => String(v || '').slice(0, 1000);
-
-module.exports = function(db) {
+module.exports = function(db, options={}) {
   const router = express.Router();
-  let busy = false;
-  async function sync() {
-    if (busy) return { skipped: true, reason: 'already_running' };
-    const mailbox = process.env.CRM_MAILBOX_1;
-    const password = process.env.CRM_MAIL_PASSWORD_1;
-    const host = process.env.CRM_IMAP_HOST;
-    if (!mailbox || !password || !host) throw new Error('IMAP ei ole seadistatud (CRM_IMAP_HOST, CRM_MAILBOX_1, CRM_MAIL_PASSWORD_1).');
-    const port = Number(process.env.CRM_IMAP_PORT || 993);
-    if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error('Vigane IMAP port.');
-    busy = true;
-    let client;
-    let scanned = 0, imported = 0, matched = 0;
-    try {
-      client = new ImapFlow({ host, port, secure: true, auth: { user: mailbox, pass: password }, logger: false, socketTimeout: 30000, greetingTimeout: 15000, tls: { minVersion: 'TLSv1.2' } });
-      await client.connect();
-      const box = await client.getMailboxLock('INBOX');
-      try {
-        const since = new Date(Date.now() - 45 * 86400000);
-        const uids = await client.search({ since }, { uid: true });
-        // Limit per sync; newest first, no message flags changed.
-        for (const uid of uids.slice(-250)) {
-          const message = await client.fetchOne(uid, { uid: true, source: true }, { uid: true });
-          if (!message?.source) continue;
-          scanned++;
-          const parsed = await simpleParser(message.source, { skipHtmlToText: false });
-          const messageId = normalizeId(parsed.messageId);
-          if (!messageId) continue;
-          const sender = email(parsed.from?.value?.[0]?.address);
-          if (!sender || sender === email(mailbox)) continue;
-          const referenceText = [parsed.inReplyTo, ...(Array.isArray(parsed.references) ? parsed.references : [parsed.references])].flat().filter(Boolean).join(' ');
-          const references = (referenceText.match(/<[^<>]+>/g) || referenceText.split(/\s+/)).map(normalizeId).filter(Boolean);
-          if (!references.length) continue; // Do not guess client identity by subject alone.
-          const sent = await db('crm_email_outbox').where({ status: 'sent', user_id: 1 }).whereIn('message_id', references.map(v => '<' + v + '>')).orderBy('id', 'desc').first();
-          if (!sent || sender !== email(sent.recipient)) continue;
-          matched++;
-          const text = String(parsed.text || '').slice(0, 20000);
-          const subject = quote(parsed.subject).slice(0, 500);
-          const date = parsed.date instanceof Date && !Number.isNaN(parsed.date.getTime()) ? parsed.date : new Date();
-          await db.transaction(async trx => {
-            // Same lock order as completion, selection, send and stop.
-            await trx('crm_clients').where({id:sent.client_id}).forUpdate().first('id');
-            const exists = await trx('crm_email_inbox').where({ mailbox_user_id: 1, message_id: '<' + messageId + '>' }).first('id');
-            if (exists) return;
-            await trx('crm_email_inbox').insert({ mailbox_user_id: 1, outbox_id: sent.id, client_id: sent.client_id, activity_id: sent.activity_id, sender, recipient: email(mailbox), subject, body: text, message_id: '<' + messageId + '>', received_at: date, created_at: trx.fn.now() });
-            imported++;
-            // Cancel only an untouched automatic 14-day follow-up created from this exact activity.
-            const automatic = await trx('crm_v8_activity_events').where({ activity_id: sent.activity_id, event_type: 'completed_default_followup' }).orderBy('id', 'desc').first('details');
-            if (!automatic) return;
-            let followId;
-            try { followId = JSON.parse(automatic.details).next_activity_id; } catch (_) { return; }
-            if (!isId(followId)) return;
-            const follow = await trx('crm_activities').where({ id: followId, client_id: sent.client_id, status: 'active' }).forUpdate().first();
-            if (!follow) return;
-            const changed = await trx('crm_v8_activity_events').where({ activity_id: followId }).whereNotIn('event_type', ['created_default_followup']).first('id');
-            if (changed) return;
-            await trx('crm_activities').where({ id: followId, status: 'active' }).update({ status: 'stopped', updated_at: trx.fn.now() });
-            await trx('crm_v8_activity_events').insert({ activity_id: followId, user_id: 1, event_type: 'auto_followup_cancelled_reply', details: JSON.stringify({ inbox_message_id: '<' + messageId + '>', original_activity_id: sent.activity_id }) });
-          });
-        }
-      } finally { box.release(); }
-      return { scanned, matched, imported };
-    } finally {
-      if (client) { try { await client.logout(); } catch (_) { try { client.close(); } catch (_) {} } }
-      busy = false;
-    }
-  }
-  router.get('/mail/imap/status', (req, res) => {
-    if (req.crmUser.role !== 'admin') return res.status(403).json({ error: 'Ainult administraatorile.' });
-    res.json({ enabled: process.env.CRM_IMAP_ENABLED === '1', configured: !!(process.env.CRM_IMAP_HOST && process.env.CRM_MAILBOX_1 && process.env.CRM_MAIL_PASSWORD_1), mailbox: process.env.CRM_MAILBOX_1 || null });
+  const service=createSync(db,options);
+  const sync=service.sync;
+  router.get('/mail/imap/status', async (req,res,next)=>{
+    if(req.crmUser.role!=='admin')return res.status(403).json({error:'Ainult administraatorile.'});
+    try{res.json(await service.status());}catch(e){next(e);}
   });
-  router.post('/mail/imap/sync', async (req, res, next) => {
-    if (req.crmUser.role !== 'admin') return res.status(403).json({ error: 'Ainult administraatorile.' });
-    try { res.json(await sync()); } catch (err) { next(err); }
+  router.post('/mail/imap/sync',async(req,res)=>{
+    if(req.crmUser.role!=='admin')return res.status(403).json({error:'Ainult administraatorile.'});
+    try{res.json(await sync());}catch{res.status(502).json({error:'Postkastide sünkroonimine ebaõnnestus. Kontrolli seadistust.'});}
   });
   router.get('/mail/client/:id/replies', async (req, res, next) => {
     try {
@@ -122,10 +54,10 @@ module.exports = function(db) {
       res.json({handled:true});
     } catch(e){if(e instanceof workflow.WorkflowError)return res.status(e.status).json({error:e.message});next(e)}
   });
-  if (process.env.CRM_IMAP_ENABLED === '1') {
-    const timer = setInterval(() => sync().catch(e => console.error('[CRM IMAP] Sync failed:', e.message)), 5 * 60 * 1000);
+  if (options.schedule!==false && mailboxes.pollingEnabled(options.env||process.env)) {
+    const timer = setInterval(() => sync().then(report=>{if(report.mailboxes?.some(m=>m.status!=='ok'||m.message_errors))console.error('[CRM IMAP] Mõne postkasti sünkroonimine vajab kontrollimist.');}).catch(()=>console.error('[CRM IMAP] Sünkroonimine ebaõnnestus; privaatsed veateated peidetud.')), 5 * 60 * 1000);
     timer.unref();
-    setTimeout(() => sync().catch(e => console.error('[CRM IMAP] Initial sync failed:', e.message)), 15000).unref();
+    setTimeout(() => sync().catch(()=>console.error('[CRM IMAP] Esmane sünkroonimine ebaõnnestus; privaatsed veateated peidetud.')), 15000).unref();
   }
   return router;
 };
