@@ -524,7 +524,7 @@ async function crmResetPassword(id){const p=prompt('Uus CRM-i sisselogimise paro
 // Unified activity workflow. All views call these same forms and endpoints.
 let v8Active=null,v8Action=null,v8Stop=null,v8Pending=false,crmMailDraft=null;
 let crmQueueLoad=0;
-let crmQueues=null,crmQueueTemplate="",crmQueuePages={overdue:0,today:0,continuation:0};
+let crmQueues=null,crmQueueTemplate="",crmQueuePages={overdue:0,today:0};
 let crmReady=false,crmRealMe=null,crmRealUsers=[],crmReplyAlerts=[],crmReplyLoading=false,crmReplyReview=null;
 let crmSelectedClient=null,crmClientResult=null,crmClientMessages=[],crmClientReplies=[],crmClientRequest=0;
 const crmReplyIds=clientId=>[...new Set([...crmReplyAlerts,...crmClientReplies].filter(r=>Number(r.client_id||crmSelectedClient)===Number(clientId)&&!r.handled_at).map(r=>Number(r.id)))];
@@ -560,24 +560,28 @@ function crmClientActivities(result){
 function renderDashboard(){
  const alerts=crmReplyAlerts.map(a=>`<section class="panel" style="border-left:5px solid #c62828"><div class="taskhead"><div><b>${esc(a.client_name)}</b><div class="bad"><b>Klient vastas</b></div><div class="muted">${esc(a.subject||'(Pealkirjata)')} · ${esc(a.sender)}</div></div><div class="choices"><button onclick="crmOpenReplyClient(${Number(a.client_id)})">Ava kliendikaart</button>${Number(a.owner_user_id)===Number(crmRealMe?.id)?`<button onclick="crmReviewReply(${Number(a.id)},${Number(a.client_id)})">Käsitle vastust</button><button onclick="crmReplyPlan(${Number(a.client_id)})">Planeeri uus tegevus</button><button onclick="crmReplyStop(${Number(a.client_id)})">Lõpeta jälgimine</button>`:'<span class="muted">Ainult vaatamine</span>'}</div></div></section>`).join('');
  if(!crmQueues)return '<h2>Töölaud</h2><p class="muted">Laadin päevaplaani…</p>';
- const lane=tab==='overdue'?'overdue':tab==='continuation'?'continuation':'today';
+ const lane=tab==='overdue'?'overdue':'today';
  const q=crmQueues.queues[lane],busy=v8Pending||!!v8Active||!!v8Action||!!v8Stop;
- const cards=[['today','activities'],['overdue','overdue'],['continuation','continuation']].map(([key,t])=>{
-  const item=crmQueues.queues[key];return `<button class="card ${lane===key?'active':''}" onclick="switchTab('${t}')">${esc(item.title)}<strong>${item.shown}/${item.total}</strong><span class="muted">Näidatud / järjekorras kokku</span></button>`;
- }).join('');
- const tasks=q.items.filter(a=>a.kind==='activity').map(crmTask);
- const clients=q.items.filter(a=>a.kind==='client').map(c=>`<section class="panel"><div class="taskhead"><div><b>${esc(c.client)}</b><div class="muted">${esc(c.owner_name||'')} · Tehtud tegevusi: ${Number(c.followup_count||0)}</div><div class="small muted">${c.last_contact?'Viimane kontakt: '+esc(c.last_contact):'Viimase kontakti aeg teadmata'}</div></div><button onclick="crmOpenReplyClient(${Number(c.client_id)})">Ava kliendikaart</button></div></section>`).join('');
- const selector=lane==='continuation'&&!crmQueues.read_only?`<label for="crmQueueTemplate">Tegevusmall järgmiseks valikuks</label><select id="crmQueueTemplate" ${busy?'disabled':''} onchange="crmQueueTemplate=this.value"><option value="">Vali tegevusmall</option>${data.templates.map(t=>`<option value="${esc(t.id)}" ${String(t.id)===String(crmQueueTemplate)?'selected':''}>${esc(t.type)} · ${esc(t.purpose||t.name)}</option>`).join('')}</select><p class="small muted">Valik loob kuni 6 tänase tähtajaga tegevust. E-kirju automaatselt ei saadeta.</p>`:'';
+ const cards=[['today','activities'],['overdue','overdue']].map(([key,t])=>{
+  const item=crmQueues.queues[key];return `<button class="card ${tab===t?'active':''}" onclick="switchTab('${t}')">${esc(item.title)}<strong>${item.shown}/${item.total}</strong><span class="muted">Näidatud / järjekorras kokku</span></button>`;
+ }).join('')+`<button class="card ${tab==='warnings'?'active':''}" onclick="switchTab('warnings')">Käibehoiatused<strong>Ootel</strong><span class="muted">Vajab Ionprindi ühendust</span></button>`;
+ const header=`<h2>Töölaud · ${esc(crmQueues.work_date)}</h2><div class="cards">${cards}</div>`;
+ const replies=alerts?`<h2>Klientide vastused · ${crmReplyAlerts.length}</h2><div class="stack">${alerts}</div>`:'';
+ if(tab==='warnings')return header+'<section class="panel"><h3>Käibehoiatused</h3><p class="muted">See koht on reserveeritud käibelangusega klientide tegevustele. Hoiatused lisanduvad pärast Ionprindi andmeühenduse valmimist.</p></section>'+replies;
+ const tasks=q.items.map(crmTask);
+ const waiting=crmQueues.unplanned;
+ const fill=lane==='today'?`<div class="divider"></div><p class="muted">${waiting.total} varem suheldud avatud klienti ootab järgmise tegevuse planeerimist.</p>${!crmQueues.read_only&&waiting.can_fill?`<label for="crmQueueTemplate">Tegevusmall vabade kohtade täitmiseks</label><select id="crmQueueTemplate" ${busy||!waiting.can_fill?'disabled':''} onchange="crmQueueTemplate=this.value"><option value="">Vali tegevusmall</option>${data.templates.map(t=>`<option value="${esc(t.id)}" ${String(t.id)===String(crmQueueTemplate)?'selected':''}>${esc(t.type)} · ${esc(t.purpose||t.name)}</option>`).join('')}</select><p class="small muted">Kuupäevaga tegevused on eespool. Valik lisab kuni ${waiting.slots} tegevust tänasesse plaani; kirju automaatselt ei saadeta.</p><button class="primary" ${busy||!waiting.can_fill?'disabled':''} onclick="crmQueueNext('today',true)">Täida vabad kohad klientidega</button>`:''}`:'';
  const navigation=crmQueues.read_only?`<div class="choices"><button ${q.page===0||busy?'disabled':''} onclick="crmQueuePage('${lane}',-1)">Eelmised</button><button ${!q.has_next||busy?'disabled':''} onclick="crmQueuePage('${lane}',1)">Järgmised</button></div>`:
-  `${selector}<button class="primary" ${!q.can_next||busy?'disabled':''} onclick="crmQueueNext('${lane}')">${lane==='continuation'&&q.preview?'Võta kuni 6 klienti päevaplaani':'Võta järgmised'}</button>`;
- const explanation=crmQueues.read_only?'Administraatori ülevaade kõigi töötajate järjekordadest. Päevaplaani valimiseks kasuta tavakasutaja režiimi.':q.preview?'Varem suheldud avatud kliendid, kellel puudub aktiivne tegevus. Vali mall ja võta nad päevaplaani.':`Selles valikus ${q.selected} tegevust; praegu kuvatud ${q.shown}. Lõpetatud või edasi lükatud tegevuste asemele uusi automaatselt ei lisata.`;
- return `<h2>Töölaud · ${esc(crmQueues.work_date)}</h2><div class="cards">${cards}</div><section class="panel"><h3>${esc(q.title)} · ${q.shown}/${q.total}</h3><p class="muted">${esc(explanation)}</p><p class="small muted">Veel kuvamata: ${q.waiting}</p>${navigation}</section>${renderTasks(tasks)}${clients?'<div class="stack">'+clients+'</div>':''}${!q.items.length?'<p class="muted">Selles valikus praegu tegevusi ei ole.</p>':''}${alerts?`<h2>Klientide vastused · ${crmReplyAlerts.length}</h2><div class="stack">${alerts}</div>`:''}`;
+  `<button class="primary" ${!q.can_next||busy?'disabled':''} onclick="crmQueueNext('${lane}')">Võta järgmised</button>`;
+ const explanation=crmQueues.read_only?'Administraatori ülevaade kõigi töötajate järjekordadest. Päevaplaani valimiseks kasuta tavakasutaja režiimi.':`Selles valikus ${q.selected} tegevust; praegu kuvatud ${q.shown}. Lõpetatud või edasi lükatud tegevuste asemele uusi automaatselt ei lisata.`;
+ return `${header}<section class="panel"><h3>${esc(q.title)} · ${q.shown}/${q.total}</h3><p class="muted">${esc(explanation)}</p><p class="small muted">Veel kuvamata: ${q.waiting}</p>${navigation}${fill}</section>${renderTasks(tasks)}${!q.items.length?'<p class="muted">Selles valikus praegu tegevusi ei ole.</p>':''}${replies}`;
 }
-async function crmQueueNext(lane){
- if(v8Pending||v8Active||v8Action||v8Stop||!crmQueues?.queues[lane]?.can_next)return;
- if(lane==='continuation'&&!crmQueueTemplate)return alert('Vali tegevusmall.');
- const body={action:'next',lane,version:crmQueues.version,work_date:crmQueues.work_date};
- if(lane==='continuation')body.template_id=Number(crmQueueTemplate);
+async function crmQueueNext(lane,fill=false){
+ if(v8Pending||v8Active||v8Action||v8Stop||!crmQueues)return;
+ if(fill?!crmQueues.unplanned.can_fill:!crmQueues.queues[lane]?.can_next)return;
+ if(fill&&!crmQueueTemplate)return alert('Vali tegevusmall.');
+ const body={action:fill?'fill':'next',lane,version:crmQueues.version,work_date:crmQueues.work_date};
+ if(fill)body.template_id=Number(crmQueueTemplate);
  v8Pending=true;render();
  try{await v8Api('/v8/work-queues/select',{method:'POST',body:JSON.stringify(body)});await v8ReloadTasks();}
  catch(e){alert(e.message);try{await v8ReloadTasks();}catch{notice='Päevaplaani laadimine ebaõnnestus. Värskenda lehte.';}}

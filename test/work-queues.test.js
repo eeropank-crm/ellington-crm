@@ -52,8 +52,8 @@ test('work date follows Tallinn midnight in winter and summer',()=>{
 test('queue reads preserve records and exclude stopped, future, untouched, reply-awaiting and other-owner clients',async()=>{
  const before=await snapshot(),result=await view();
  assert.equal(result.initialized,false);assert.equal(result.work_date,day);
- assert.equal(result.queues.overdue.total,15);assert.equal(result.queues.today.total,10);assert.equal(result.queues.continuation.total,10);
- assert.equal(result.queues.continuation.shown,6);assert.deepEqual(result.queues.continuation.items.slice(0,2).map(c=>c.client_id),fixtures.unplanned.slice(0,2));
+ assert.equal(result.queues.overdue.total,15);assert.equal(result.queues.today.total,10);assert.equal(result.unplanned.total,10);
+ assert.deepEqual(Object.keys(result.queues).sort(),['overdue','today']);assert.equal(result.revenue_warnings.available,false);
  assert.deepEqual(await snapshot(),before);
  assert.equal(Number((await db('crm_work_queue_days').where({owner_user_id:a.id}).count('* as n').first()).n),0);
  await api('/v8/work-queues',undefined,401,null);
@@ -99,25 +99,40 @@ test('explicit next batch is atomic across browser tabs and keeps the original a
  const after=await view();assert.equal(after.version,current.version+1);assert.equal(after.queues.overdue.shown,6);assert.ok(after.queues.overdue.items.every(a=>!firstBatch.includes(a.id)));
  assert.deepEqual(await snapshot(),before);
 });
-test('returning clients require explicit template selection; selecting six creates tasks but sends nothing and preserves followup counts',async()=>{
- const before=await view(),baseBody={action:'next',lane:'continuation',version:before.version,work_date:day};
- const original=await snapshot();await api('/v8/work-queues/select',baseBody,400);assert.deepEqual(await snapshot(),original);
- await api('/v8/work-queues/select',{...baseBody,work_date:shift(-1),template_id:templates.Kõne},409);
- await api('/v8/work-queues/select',{...baseBody,user_id:b.id,template_id:templates.Kõne},400);
- const selected=(await api('/v8/work-queues/select',{...baseBody,template_id:templates.Kõne})).data;
- assert.equal(selected.queues.continuation.preview,false);assert.equal(selected.queues.continuation.shown,6);assert.equal(selected.queues.continuation.total,10);
- assert.deepEqual(selected.queues.continuation.items.map(a=>a.client_id),fixtures.unplanned.slice(0,6));
- assert.equal(selected.queues.today.total,before.queues.today.total);
- const ids=selected.queues.continuation.items.map(a=>a.id);assert.ok(selected.queues.today.items.every(a=>!ids.includes(a.id)));
+test('dated work takes priority and returning clients fill only the two unused slots in todays six',async()=>{
+ let current=await view();
+ const body=()=>({action:'fill',lane:'today',version:current.version,work_date:day,template_id:templates.Kõne});
+ const beforeBlocked=await snapshot();assert.equal(current.unplanned.can_fill,false);
+ await api('/v8/work-queues/select',body(),409);assert.deepEqual(await snapshot(),beforeBlocked);
+ for(const task of current.queues.today.items)await api('/v8/activities/'+task.id+'/resolve',{comment:'Finish dated task first'});
+ current=await view();assert.equal(current.queues.today.shown,0);assert.equal(current.queues.today.total,4);assert.equal(current.unplanned.can_fill,false);
+ await api('/v8/work-queues/select',body(),409);
+ current=(await api('/v8/work-queues/select',{action:'next',lane:'today',version:current.version,work_date:day})).data;
+ assert.equal(current.queues.today.shown,4);assert.equal(current.unplanned.slots,2);assert.equal(current.unplanned.can_fill,true);
+ const original=await snapshot(),fillBody=body();
+ await api('/v8/work-queues/select',{...fillBody,template_id:null},400);assert.deepEqual(await snapshot(),original);
+ await api('/v8/work-queues/select',{...fillBody,work_date:shift(-1)},409);
+ await api('/v8/work-queues/select',{...fillBody,user_id:b.id},400);
+ await api('/v8/work-queues/select',{...fillBody,lane:'continuation'},400);
+ const selected=(await api('/v8/work-queues/select',fillBody)).data;
+ assert.equal(selected.queues.today.shown,6);assert.equal(selected.queues.today.total,6);assert.equal(selected.unplanned.total,8);assert.equal(selected.unplanned.can_fill,false);
+ const newTasks=selected.queues.today.items.filter(a=>fixtures.unplanned.includes(a.client_id));
+ assert.deepEqual(newTasks.map(a=>a.client_id),fixtures.unplanned.slice(0,2));
  const after=await snapshot();assert.deepEqual(after.crm_clients,original.crm_clients);assert.deepEqual(after.crm_email_outbox,original.crm_email_outbox);
- assert.equal(after.crm_activities.length,original.crm_activities.length+6);
- for(const task of selected.queues.continuation.items){assert.equal(task.due_date,day);assert.equal(task.owner_user_id,a.id);}
- await api('/v8/work-queues/select',{...baseBody,template_id:templates.Kõne},409);
- assert.deepEqual(await snapshot(),after);assert.deepEqual((await view()).queues.continuation.items.map(a=>a.id),ids);
+ assert.equal(after.crm_activities.length,original.crm_activities.length+2);
+ for(const task of newTasks){assert.equal(task.due_date,day);assert.equal(task.owner_user_id,a.id);}
+ await api('/v8/work-queues/select',fillBody,409);
+ assert.deepEqual(await snapshot(),after);assert.deepEqual((await view()).queues.today.items.map(a=>a.id),selected.queues.today.items.map(a=>a.id));
+});
+test('finishing a filled slot does not reopen its allocation or refill the daily plan',async()=>{
+ const current=await view(),task=current.queues.today.items[0];
+ await api('/v8/activities/'+task.id+'/resolve',{comment:'No automatic replacement'});
+ const next=await view();assert.equal(next.queues.today.shown,5);assert.equal(next.queues.today.total,5);assert.equal(next.unplanned.slots,0);assert.equal(next.unplanned.can_fill,false);
+ const before=await snapshot();await api('/v8/work-queues/select',{action:'fill',lane:'today',version:next.version,work_date:day,template_id:templates.Kõne},409);assert.deepEqual(await snapshot(),before);
 });
 test('user scope and administrator overview cannot reassign or complete another employees work',async()=>{
  const own=await view(),other=(await api('/v8/work-queues',undefined,200,otherCookie)).data;
- assert.equal(other.queues.today.total,1);assert.equal(other.queues.continuation.total,0);
+ assert.equal(other.queues.today.total,1);assert.equal(other.unplanned.total,0);
  await api('/v8/work-queues?today_page=1',undefined,403);
  await api('/v8/activities/'+fixtures.otherActivity+'/resolve',{comment:'Must reject'},403);
  await api('/work-mode',{mode:'admin'},200,adminCookie);
@@ -131,8 +146,8 @@ test('user scope and administrator overview cannot reassign or complete another 
  assert.deepEqual(await snapshot(),before);assert.equal(Number((await db('crm_work_queue_days').count('* as n').first()).n),count);
 });
 test('next day reclassifies unfinished returning-client tasks as overdue without creating copies',async()=>{
- const current=await view(),ids=current.queues.continuation.items.map(a=>a.id),before=await snapshot();
- const tomorrow=await queues.read(db,a,{day:shift(1)});assert.equal(tomorrow.initialized,false);assert.equal(tomorrow.queues.continuation.total,4);
+ const current=await view(),ids=current.queues.today.items.filter(a=>fixtures.unplanned.includes(a.client_id)).map(a=>a.id),before=await snapshot();
+ const tomorrow=await queues.read(db,a,{day:shift(1)});assert.equal(tomorrow.initialized,false);assert.equal(tomorrow.unplanned.total,8);
  const initialized=await queues.select(db,a,{action:'initialize'},shift(1));assert.equal(initialized.work_date,shift(1));
  const plans=await db('crm_work_queue_days').where({owner_user_id:a.id});assert.equal(plans.length,2);
  const shown=[];
@@ -173,9 +188,9 @@ test('a concurrent manual planner cannot produce a second active task for a retu
  const listener=query=>{if(query.sql.includes('crm_clients')&&query.sql.includes('for update')&&query.bindings.includes(first)){observed=true;release();}};
  const timer=setTimeout(release,5000);db.on('query',listener);
  try{
-  const selected=await queues.select(db,user,{action:'next',lane:'continuation',version:initial.version,work_date:day,template_id:templates.Kõne});
+  const selected=await queues.select(db,user,{action:'fill',lane:'today',version:initial.version,work_date:day,template_id:templates.Kõne});
   await manual;assert.equal(observed,true);
-  assert.deepEqual(selected.queues.continuation.items.map(a=>a.client_id),[second]);
+  assert.deepEqual(selected.queues.today.items.map(a=>a.client_id),[second]);
   assert.equal(Number((await db('crm_activities').where({client_id:first,status:'active'}).count('* as n').first()).n),1);
  }finally{clearTimeout(timer);db.removeListener('query',listener);release();await manual;}
 });

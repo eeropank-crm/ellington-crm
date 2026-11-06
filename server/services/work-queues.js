@@ -1,7 +1,7 @@
 'use strict';
 const w=require('./activity-workflow');
-const LIMIT=6,LANES=['overdue','today','continuation'];
-const titles={overdue:'Hilinenud tegevused',today:'Tänased tegevused',continuation:'Jätkamist ootavad kliendid'};
+const LIMIT=6,LANES=['overdue','today'];
+const titles={overdue:'Hilinenud tegevused',today:'Tänased tegevused'};
 const empty=()=>Object.fromEntries(LANES.map(lane=>[lane,{ids:[],seen:[],batch:0}]));
 const error=(status,message)=>{throw new w.WorkflowError(status,message);};
 const key=id=>String(id);
@@ -13,22 +13,17 @@ function stateOf(row){
  return state;
 }
 function date(day){if(!w.validDate(day))error(400,'Vigane tööpäev.');return day;}
-async function pools(db,user,day,state){
+async function pools(db,user,day){
  const admin=user.role==='admin';
- const continuation=new Set(state.continuation.seen.map(key));
- if(admin){
-  const plans=await db('crm_work_queue_days').where({work_date:day}).select('state');
-  for(const plan of plans)for(const id of stateOf(plan).continuation.seen)continuation.add(key(id));
- }
  const rows=await db('crm_activities as a').join('crm_clients as c','c.id','a.client_id').leftJoin('crm_activity_details as d','d.activity_id','a.id').leftJoin('users as u','u.id','a.owner_user_id')
   .where('a.status','active').where(q=>q.whereNull('c.stop_reason').orWhere('c.stop_reason',''))
   .modify(q=>{if(!admin)q.where('a.owner_user_id',user.id).where('c.owner_user_id',user.id);})
   .select('a.*','c.name as client','c.followup_count','u.name as owner_name','d.purpose','d.instructions','d.subject','d.template_id','d.next_step_json').orderBy('a.due_date').orderBy('a.id');
- const result={overdue:[],today:[],continuation:[]};
+ const result={overdue:[],today:[]};
  for(const raw of rows){
   const a={...raw,due_date:w.dateOnly(raw.due_date),nextStep:w.parse(raw.next_step_json)};
   if(a.due_date<day)result.overdue.push(a);
-  else if(a.due_date===day)result[continuation.has(key(a.id))?'continuation':'today'].push(a);
+  else if(a.due_date===day)result.today.push(a);
  }
  // A future or otherwise active task blocks another task for the same client.
  const candidates=await db('crm_clients as c').leftJoin('users as u','u.id','c.owner_user_id')
@@ -47,43 +42,53 @@ async function read(db,user,{day=w.today(),pages={}}={}){
  date(day);
  const admin=user.role==='admin';
  const plan=admin?null:await db('crm_work_queue_days').where({owner_user_id:user.id,work_date:day}).first();
- const state=stateOf(plan),available=await pools(db,user,day,state),queues={};
+ const state=stateOf(plan),available=await pools(db,user,day),queues={};
  for(const lane of LANES){
   const entries=available[lane],ids=new Set(state[lane].ids.map(key));
   const selected=entries.filter(a=>ids.has(key(a.id)));
-  const preview=lane==='continuation'&&!state[lane].seen.length;
   const page=admin?Number(pages[lane]||0):0;
   if(!Number.isSafeInteger(page)||page<0||page>100000)error(400,'Vigane lehekülg.');
-  const candidateTotal=lane==='continuation'?available.candidates.length:0;
-  const total=entries.length+candidateTotal;
-  const list=admin?(lane==='continuation'?[...entries,...available.candidates.map(c=>({...c,client_id:c.id,client:c.name,kind:'client'}))]:entries).slice(page*LIMIT,(page+1)*LIMIT):
-   preview?available.candidates.slice(0,LIMIT).map(c=>({...c,client_id:c.id,client:c.name,kind:'client'})):selected;
-  queues[lane]={title:titles[lane],items:list.map(a=>({...a,kind:a.kind||'activity'})),shown:list.length,total,waiting:Math.max(0,total-list.length),selected:state[lane].ids.length,batch:state[lane].batch,preview:!admin&&preview,page,has_next:admin&&(page+1)*LIMIT<total,
-   can_next:!admin&&!!plan&&selected.length===0&&(lane==='continuation'?candidateTotal>0:entries.some(a=>!state[lane].seen.includes(Number(a.id))))};
+  const list=admin?entries.slice(page*LIMIT,(page+1)*LIMIT):selected;
+  queues[lane]={title:titles[lane],items:list.map(a=>({...a,kind:'activity'})),shown:list.length,total:entries.length,waiting:Math.max(0,entries.length-list.length),selected:state[lane].ids.length,batch:state[lane].batch,page,has_next:admin&&(page+1)*LIMIT<entries.length,
+   can_next:!admin&&!!plan&&selected.length===0&&entries.some(a=>!state[lane].seen.includes(Number(a.id)))};
  }
- return {work_date:day,limit:LIMIT,read_only:admin,initialized:!!plan,version:plan?.version??null,queues};
+ const reset=queues.today.shown===0&&state.today.ids.length>0;
+ const slots=reset?LIMIT:LIMIT-state.today.ids.length;
+ const pending=available.today.some(a=>!state.today.seen.includes(Number(a.id)));
+ const unplanned={total:available.candidates.length,slots,can_fill:!admin&&!!plan&&slots>0&&!pending&&available.candidates.length>0};
+ return {work_date:day,limit:LIMIT,read_only:admin,initialized:!!plan,version:plan?.version??null,queues,unplanned,revenue_warnings:{available:false}};
 }
 async function select(db,user,input={},day=w.today()){
  date(day);
  if(user.role==='admin')error(403,'Päevaplaani valimiseks lülitu tavakasutaja režiimi.');
- if(!['initialize','next'].includes(input.action)||Object.keys(input).some(k=>!['action','lane','version','work_date','template_id'].includes(k)))error(400,'Vigane päevaplaani toiming.');
+ if(!['initialize','next','fill'].includes(input.action)||Object.keys(input).some(k=>!['action','lane','version','work_date','template_id'].includes(k)))error(400,'Vigane päevaplaani toiming.');
  return db.transaction(async trx=>{
   const actor=await trx('users').where({id:user.id,is_active:1}).forUpdate().first('id','role');
   if(!actor)error(403,'Kasutaja pole aktiivne.');
   let plan=await trx('crm_work_queue_days').where({owner_user_id:user.id,work_date:day}).first();
   if(input.action==='initialize'){
    if(plan)return read(trx,user,{day});
-   const state=empty(),available=await pools(trx,user,day,state);
+   const state=empty(),available=await pools(trx,user,day);
    for(const lane of ['overdue','today'])state[lane].ids=state[lane].seen=available[lane].slice(0,LIMIT).map(a=>Number(a.id));
    await trx('crm_work_queue_days').insert({owner_user_id:user.id,work_date:day,version:1,state:JSON.stringify(state)});
    return read(trx,user,{day});
   }
   if(!plan||input.work_date!==day||!Number.isSafeInteger(input.version)||input.version!==plan.version)error(409,'Päevaplaan muutus. Värskenda töölauda.');
   if(!LANES.includes(input.lane))error(400,'Vigane tööjärjekord.');
-  const state=stateOf(plan),lane=input.lane,available=await pools(trx,user,day,state);
-  if(available[lane].some(a=>state[lane].ids.includes(Number(a.id))))error(409,'Tee praeguse valiku tegevused enne ära või lükka need edasi.');
+  const state=stateOf(plan),lane=input.lane,available=await pools(trx,user,day);
+  const filling=input.action==='fill';
+  if(filling&&lane!=='today')error(400,'Kliente saab lisada ainult tänasesse plaani.');
+  const currentActive=available[lane].some(a=>state[lane].ids.includes(Number(a.id)));
+  if(!filling&&currentActive)error(409,'Tee praeguse valiku tegevused enne ära või lükka need edasi.');
+  let slots=LIMIT;
+  if(filling){
+   if(available.today.some(a=>!state.today.seen.includes(Number(a.id))))error(409,'Võta esmalt järjekorras olevad kuupäevaga tegevused.');
+   if(!currentActive&&state.today.ids.length){state.today.ids=[];state.today.batch++;}
+   slots=LIMIT-state.today.ids.length;
+   if(slots<=0)error(409,'Tänase valiku kuus kohta on juba kasutusel.');
+  }
   const ids=[];
-  if(lane==='continuation'){
+  if(filling){
    const templateId=Number(input.template_id);
    if(!Number.isSafeInteger(templateId)||templateId<1)error(400,'Vali olemasolev tegevusmall.');
    const template=await trx('crm_templates').where({id:templateId,is_active:1}).first();
@@ -94,11 +99,11 @@ async function select(db,user,input={},day=w.today()){
     if(await trx('crm_activities').where({client_id:candidate.id,status:'active'}).forUpdate().first('id'))continue;
     if(await trx('crm_email_inbox').where({client_id:candidate.id}).whereNull('handled_at').forUpdate().first('id'))continue;
     const created=await w.create(trx,user,{client_id:Number(candidate.id),type:template.type,template_id:template.id,purpose:template.purpose||template.name,instructions:template.body||'',subject:template.subject||'',due_date:day});
-    ids.push(Number(created.id));if(ids.length===LIMIT)break;
+    ids.push(Number(created.id));if(ids.length===slots)break;
    }
   }else ids.push(...available[lane].filter(a=>!state[lane].seen.includes(Number(a.id))).slice(0,LIMIT).map(a=>Number(a.id)));
   if(!ids.length)error(409,'Sobivaid tegevusi ei ole enam järjekorras. Värskenda töölauda.');
-  state[lane]={ids,seen:[...state[lane].seen,...ids],batch:state[lane].batch+1};
+  state[lane]={ids:filling?[...state[lane].ids,...ids]:ids,seen:[...state[lane].seen,...ids],batch:state[lane].batch+(filling?0:1)};
   const encoded=JSON.stringify(state);if(Buffer.byteLength(encoded)>60000)error(409,'Päevaplaani maht on täis. Jätka kliendikaardilt.');
   await trx('crm_work_queue_days').where({id:plan.id}).update({state:encoded,version:plan.version+1,updated_at:trx.fn.now()});
   return read(trx,user,{day});
