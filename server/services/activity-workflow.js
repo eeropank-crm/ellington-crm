@@ -4,7 +4,7 @@
 const TYPES = ['Kõne', 'E-kiri', 'Kohtumine'];
 class WorkflowError extends Error { constructor(status, message) { super(message); this.status = status; } }
 const fail = (status, message) => { throw new WorkflowError(status, message); };
-const today = () => new Intl.DateTimeFormat('sv-SE', {timeZone:'Europe/Tallinn', year:'numeric', month:'2-digit', day:'2-digit'}).format(new Date());
+const today = (now=new Date()) => new Intl.DateTimeFormat('sv-SE', {timeZone:'Europe/Tallinn', year:'numeric', month:'2-digit', day:'2-digit'}).format(now);
 const dateOnly = x => x instanceof Date ? new Intl.DateTimeFormat('sv-SE',{timeZone:'Europe/Tallinn',year:'numeric',month:'2-digit',day:'2-digit'}).format(x) : String(x).slice(0,10);
 const validDate = d => typeof d === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(d) && !Number.isNaN(Date.parse(d)) && new Date(d).toISOString().slice(0,10) === d;
 const text = (v, max, label, min=0) => { if (v==null) v=''; if(typeof v!=='string'||v.trim().length<min||v.trim().length>max) fail(400,'Kontrolli välja: '+label+'.'); return v.trim(); };

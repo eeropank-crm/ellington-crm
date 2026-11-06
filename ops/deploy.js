@@ -14,6 +14,7 @@ const source=path.resolve(__dirname,'..');
 const required=['package.json','package-lock.json','public/index.html','private/dashboard.html','private/v8/prototuup_v8.html','server/index.js','server/app.js','server/db.js','server/session.js','server/auth.js','server/work-mode.js',
  'server/routes/login.js','server/routes/account.js','server/routes/crm.js','server/routes/crm_v8_extension.js','server/routes/crm_budget_extension.js','server/routes/crm_mail_extension.js','server/routes/crm_imap_extension.js','server/services/activity-workflow.js',
  'database/001_users.sql','database/002_sessions.sql','database/migrations/001_base.js','database/migrations/002_v8.js','database/migrations/003_v8_lookup_indexes.js','database/migrations/004_legacy_v8_transition.js','ops/legacy-transition.js','ops/legacy-v8-profile.json','ops/data-audit.js','ops/legacy-transition-guards.sql','ops/schema-values.js','ops/schema-diagnostics.sql','ops/schema-contract.json','ops/schema.js','ops/database.js','ops/sql-mode.js','ops/deploy.js','ops/pm2-control.js'];
+required.push('server/services/work-queues.js','server/routes/work-queues.js','database/migrations/005_daily_work_queues.js');
 const flags=new Set(['env','host','database','root','control','revision','backup','dump-command','client-command','maintenance-confirmed','offline','restored','diagnostics']);
 function args(argv){
  const [command,...rest]=argv, out={command};
