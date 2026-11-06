@@ -126,3 +126,11 @@ Ekraanipildid:
 - [Ionprindi jaoks reserveeritud käibehoiatuste koht](work-queues/warnings.png)
 - [Administraatori ülevaade](work-queues/admin.png)
 - [Mobiilne vaade](work-queues/mobile.png)
+
+Koos seotud skeemi-, pärandskeemi ülemineku-, paigalduse/taastamise ja
+kasutajaõiguste regressioonidega: **41 läbitud, 0 ebaõnnestunud, 0 vahele jäetud**,
+väljumiskood 0. Kontroll hõlmas 13 tööjärjekorra testi ja 28 seotud olemasolevat
+testi; kogu varasemat 39 testi komplekti ei korratud. Kontrolliti eraldi,
+et kuupäevaga tegevused ei jää kliendivaliku taha, nelja olemasoleva tegevuse
+kõrvale saab luua ainult kaks uut ning lõpetamine ei ava automaatselt kasutatud
+kohta. Migratsioonid 001–004 ja sõltuvuste failid on muutmata.
