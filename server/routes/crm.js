@@ -368,6 +368,7 @@ router.post('/admin/portfolio-transfer',async(req,res,next)=>{
   }catch(e){next(e);}
 });
 
+router.use(require('./work-queues')(db));
 router.use(require('./crm_budget_extension')(db));
 router.use(require('./crm_v8_extension')(db));
 router.use(require('./crm_mail_extension')(db));

@@ -8,6 +8,7 @@ SELECT TABLE_NAME, TABLE_TYPE, ENGINE, TABLE_COLLATION
 FROM information_schema.TABLES
 WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME IN (
   'crm_activities',
+  'crm_work_queue_days',
   'crm_activity_details',
   'crm_activity_history',
   'crm_budget_change_log',
@@ -51,6 +52,7 @@ SELECT TABLE_NAME, COLUMN_NAME, DATA_TYPE,
 FROM information_schema.COLUMNS
 WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME IN (
   'crm_activities',
+  'crm_work_queue_days',
   'crm_activity_details',
   'crm_activity_history',
   'crm_budget_change_log',
@@ -75,6 +77,7 @@ SELECT TABLE_NAME, INDEX_NAME, NON_UNIQUE, SEQ_IN_INDEX, COLUMN_NAME, SUB_PART, 
 FROM information_schema.STATISTICS
 WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME IN (
   'crm_activities',
+  'crm_work_queue_days',
   'crm_activity_details',
   'crm_activity_history',
   'crm_budget_change_log',
@@ -99,6 +102,7 @@ SELECT TABLE_NAME, CONSTRAINT_TYPE
 FROM information_schema.TABLE_CONSTRAINTS
 WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME IN (
   'crm_activities',
+  'crm_work_queue_days',
   'crm_activity_details',
   'crm_activity_history',
   'crm_budget_change_log',
