@@ -130,10 +130,17 @@ router.get('/clients/:id', async (req, res, next) => {
       .where('a.client_id',id).where('e.event_type','reply_handled')
       .select('e.id','e.details','e.created_at','u.name as actor_name').orderBy('e.id','desc');
     const replyHistory=replyEvents.map(e=>({...e,...workflow.parse(e.details)}));
+    const editEvents=await db('crm_v8_activity_events as e')
+      .join('crm_activities as a','a.id','e.activity_id')
+      .leftJoin('users as u','u.id','e.user_id')
+      .where('a.client_id',id).where('e.event_type','activity_edited')
+      .select('e.id','e.activity_id','e.details','e.created_at','u.name as actor_name').orderBy('e.id','desc');
+    const editHistory=editEvents.map(e=>({...e,...workflow.parse(e.details)}));
     res.json({
       activities,
       activityHistory,
       replyHistory,
+      editHistory,
       client: {
         id: client.id,
         name: client.name,
