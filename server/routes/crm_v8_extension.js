@@ -86,6 +86,13 @@ module.exports = function(db) {
   });
   const action=fn=>async(req,res,next)=>{try{const result=await db.transaction(trx=>fn(trx,req));res.json(result)}catch(e){if(e instanceof w.WorkflowError)return res.status(e.status).json({error:e.message});next(e)}};
   r.post('/v8/activities', action((trx,req)=>w.create(trx,req.crmUser,req.body||{})));
+  const activityId=req=>{
+    const id=Number(req.params.id);
+    if(!Number.isSafeInteger(id)||id<1)throw new w.WorkflowError(400,'Vigane tegevus.');
+    return id;
+  };
+  r.get('/v8/activities/:id/edit',action((trx,req)=>w.editable(trx,activityId(req),req.crmUser)));
+  r.patch('/v8/activities/:id',action((trx,req)=>w.edit(trx,activityId(req),req.crmUser,req.body||{})));
   r.post('/v8/activities/:id/resolve', action(async(trx,req)=>{
     const id=Number(req.params.id),x=req.body||{};
     if(!Number.isSafeInteger(id)||id<1)throw new w.WorkflowError(400,'Vigane tegevus.');

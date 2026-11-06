@@ -107,7 +107,8 @@ function clientDetailHTML(result){
     </div>`).join('');
 
   const replyHTML=(result.replyHistory||[]).map(r=>`<div class="divider"><b>Kliendi vastus käsitletud</b><div class="muted">${esc(r.created_at||'')} · ${esc(r.actor_name||'')}</div><div>${esc(({reviewed:'Vastus läbi vaadatud',planned:'Uus tegevus planeeritud',completed:'Tegevus lõpetatud',stopped:'Jälgimine lõpetatud'})[r.action]||r.action||'')}</div><p style="white-space:pre-wrap">${esc(r.note||'')}</p></div>`).join('');
-  const historyHTML = completedHTML + replyHTML + (history.length
+  const editHTML=(result.editHistory||[]).map(e=>`<div class="divider"><b>Tegevust muudeti: ${esc(e.before?.type||'')} → ${esc(e.after?.type||'')}</b><div class="muted">${esc(e.created_at||'')} · ${esc(e.actor_name||'')}</div><div>Eesmärk: ${esc(e.before?.purpose||'—')} → ${esc(e.after?.purpose||'—')}</div></div>`).join('');
+  const historyHTML = completedHTML + replyHTML + editHTML + (history.length
     ? history.map(item => `
         <div style="margin-bottom:12px">
           <b>${esc(item.activity_type)}</b>
@@ -618,6 +619,24 @@ function v8OpenTask(id){
  v8Active={id,task:t,phase:'work',comment:'',outcome:t.type==='Kohtumine'?'':'done',nextMode:'default',next,reason:'',other:'',postponeOpen:false,postponeDate:'',replyIds:crmReplyIds(t.clientId)};render();crmScrollForm();
  if(t.type==='E-kiri')crmOpenMail(id);
 }
+async function crmEditActivity(){
+ const s=v8Active;if(!s||v8Pending||s.phase!=='work')return;
+ try{v8Pending=true;s.editLoading=true;render();const x=await v8Api('/v8/activities/'+s.id+'/edit');if(v8Active!==s)return;
+ const draft=crmMailDraft?.id===s.id&&!crmMailDraft.blocked?crmMailDraft:null;
+ s.mailBeforeEdit=draft;s.edit={type:x.type,templateId:draft?.templateId||String(x.template_id||''),purpose:draft?(v8Template(draft.templateId,'E-kiri')?.purpose||v8Template(draft.templateId,'E-kiri')?.name||x.purpose):x.purpose,subject:draft?.subject??x.subject,instructions:draft?.body??x.instructions,version:x.version};crmMailDraft=null;
+ }catch(e){alert(e.message)}finally{s.editLoading=false;v8Pending=false;render();}
+}
+function crmEditType(type){if(!v8Active?.edit||v8Pending)return;const e=v8Active.edit;Object.assign(e,{type,templateId:'',purpose:'',subject:'',instructions:''});render();}
+function crmEditTemplate(id){if(!v8Active?.edit||v8Pending)return;v8SelectTemplate(v8Active.edit,id);render();}
+function crmCancelEdit(){if(v8Pending||!v8Active)return;v8Active.edit=null;crmMailDraft=v8Active.mailBeforeEdit||null;v8Active.mailBeforeEdit=null;render();if(v8Active.task.type==='E-kiri'&&!crmMailDraft)crmOpenMail(v8Active.id);}
+async function crmSaveEdit(){
+ const s=v8Active,e=s?.edit;if(!e||v8Pending)return;
+ if(!e.templateId||!e.purpose||(e.type==='E-kiri'&&(!e.subject.trim()||!e.instructions.trim())))return alert('Vali tegevusmall ning täida e-kirja pealkiri ja sisu.');
+ try{v8Pending=true;render();await v8Api('/v8/activities/'+s.id,{method:'PATCH',body:JSON.stringify({type:e.type,template_id:Number(e.templateId),purpose:e.purpose,subject:e.subject,instructions:e.instructions,expected_version:e.version})});
+ v8Active=null;crmMailDraft=null;await crmRefresh();v8Pending=false;v8OpenTask(s.id);
+ }catch(error){alert(error.message)}finally{v8Pending=false;render();}
+}
+function crmEditForm(s){const e=s.edit;return `<h3>Muuda tegevust</h3><label>Tegevuse tüüp</label><select onchange="crmEditType(this.value)">${['Kõne','E-kiri','Kohtumine'].map(t=>`<option ${e.type===t?'selected':''}>${t}</option>`).join('')}</select><label>Eesmärk / mall</label><select onchange="crmEditTemplate(this.value)">${v8Options(e.type,e.templateId)}</select>${e.type==='E-kiri'?`<label>Kirja pealkiri</label><input maxlength="500" value="${esc(e.subject)}" oninput="v8Active.edit.subject=this.value">`:''}<label>${e.type==='E-kiri'?'Kirja sisu':'Tegevuse juhis'}</label><textarea maxlength="10000" oninput="v8Active.edit.instructions=this.value">${esc(e.instructions)}</textarea><p class="muted">Tähtaeg ${esc(s.task.due)} ja koht tööjärjekorras säilivad. Muutmine ei lõpeta tegevust ega saada kirja.</p><button class="primary" onclick="crmSaveEdit()">Salvesta muudatus</button><button onclick="crmCancelEdit()">Loobu muudatusest</button>`;}
 function v8SetOutcome(value){if(v8Active?.phase==='work'&&!v8Pending){v8Active.outcome=value;render();}}
 function v8SetNextMode(value){if(v8Active?.phase==='completed'&&!v8Pending){v8Active.nextMode=value;render();}}
 function v8SetStopReason(value){if(v8Active){v8Active.reason=value;render();}}
@@ -648,6 +667,7 @@ function crmNextHTML(s){return `<p class="good" role="status">Tegevus on lõpeta
 function v8RenderTaskForm(t){
  const s=v8Active;if(!s)return '';
  if(s.phase==='completed')return crmNextHTML(s);
+ if(s.edit)return crmEditForm(s);
  if(s.postponeOpen)return `<h3>${t.type==='E-kiri'?'Planeeri kiri hiljem':'Tegevuse edasilükkamine'}</h3><label>Uus kuupäev</label><input type="date" min="${v8Today()}" value="${esc(s.postponeDate)}" onchange="v8Active.postponeDate=this.value"><button class="primary" onclick="crmPostponeCurrent()">Salvesta uus kuupäev</button><button onclick="crmPostponeToggle()">Tagasi tegevuse juurde</button>`;
  if(t.type==='E-kiri')return `${crmMailDraft?.id===t.id?crmMailForm(t):'<p class="muted">Laadin saatmisvormi…</p><button onclick="crmOpenMail('+t.id+')">Laadi saatmisolek uuesti</button>'}${!crmMailDraft?.sent&&!crmMailDraft?.blocked?'<button onclick="crmPostponeToggle()">Planeeri hiljem</button>':''}`;
  return `${t.instructions?`<label>Tegevuse juhis</label><p style="white-space:pre-wrap">${esc(t.instructions)}</p>`:''}${t.type==='Kohtumine'?`<label>Kohtumise tulemus</label><select onchange="v8SetOutcome(this.value)"><option value="">Vali tulemus</option><option value="done" ${s.outcome==='done'?'selected':''}>Toimus</option><option value="cancelled" ${s.outcome==='cancelled'?'selected':''}>Jäi ära</option></select>`:''}<label>${t.type==='Kõne'?'Kõne tulemuse kommentaar':'Kohtumise tulemuse kommentaar'}</label><textarea rows="4" maxlength="5000" oninput="v8Active.comment=this.value">${esc(s.comment)}</textarea><button class="primary" onclick="v8ResolveTask()">Tehtud</button><button onclick="crmPostponeToggle()">Lükka tegevus edasi</button>`;
@@ -655,7 +675,8 @@ function v8RenderTaskForm(t){
 function crmWorkflowHTML(){
  if(!v8Active&&!v8Action&&!v8Stop&&!crmReplyReview)return '';
  const title=v8Active?v8Active.task.type+' · '+v8Active.task.client:v8Action?'Uus '+v8Action.type:v8Stop?'Lõpeta jälgimine':'Kliendi vastuse käsitlemine';
- const body=v8Active?v8RenderTaskForm(v8Active.task):v8Action?v8RenderAction():v8Stop?v8RenderClientStop():`<label>Käsitlemise tulemus / kokkulepe</label><textarea maxlength="5000" oninput="crmReplyReview.note=this.value">${esc(crmReplyReview.note)}</textarea><button class="primary" onclick="crmHandleReply()">Salvesta käsitlemise tulemus</button>`;
+ const change=v8Active?.phase==='work'&&!v8Active.edit&&!v8Active.postponeOpen&&!crmMailDraft?.blocked&&!crmMailDraft?.sent?'<button onclick="crmEditActivity()">Muuda tegevust</button>':'';
+ const body=v8Active?change+v8RenderTaskForm(v8Active.task):v8Action?v8RenderAction():v8Stop?v8RenderClientStop():`<label>Käsitlemise tulemus / kokkulepe</label><textarea maxlength="5000" oninput="crmReplyReview.note=this.value">${esc(crmReplyReview.note)}</textarea><button class="primary" onclick="crmHandleReply()">Salvesta käsitlemise tulemus</button>`;
  return `<section class="panel" id="crmWorkflow" style="margin-top:18px;border:2px solid #1f4d93"><div class="bar"><h3>${esc(title)}</h3><button ${v8Pending?'disabled':''} onclick="crmCloseWorkflow()">Sulge</button></div><fieldset ${v8Pending?'disabled':''} style="border:0;padding:0;margin:0;min-width:0"><div class="form">${body}</div></fieldset>${v8Pending?'<p role="status">Salvestan…</p>':''}</section>`;
 }
 function showClientAction(id,type){if(v8Pending)return;v8Active=null;v8Stop=null;crmReplyReview=null;crmMailDraft=null;v8Action={...v8Choice(type),clientId:Number(id),replyIds:crmReplyIds(id)};render();crmScrollForm();}
@@ -676,7 +697,7 @@ async function v8SaveClientStop(){
 async function crmOpenMail(id){
  const state=v8Active;if(!state||v8Pending)return;
  try{
- const x=await v8Api('/mail/activity/'+id);if(v8Active!==state)return;
+ const x=await v8Api('/mail/activity/'+id);if(v8Active!==state||state.edit||state.editLoading)return;
  if(x.send?.status==='sent'){
   const result=await v8Api('/v8/activities/'+id+'/resolve',{method:'POST',body:JSON.stringify({action:'complete',reply_ids:state.replyIds})});
   if(v8Active!==state)return;state.phase='completed';state.completion=result;await crmRefresh();return;
