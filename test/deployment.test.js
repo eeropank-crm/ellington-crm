@@ -92,7 +92,7 @@ test('full isolated apply backs up before migrating and preserves records, env a
  const original=fs.readFileSync(envFile);const originalUser=await db('users').first();const history=await db('crm_activity_history').first();
  const r=await cli('apply',['--maintenance-confirmed']);assert.equal(r.status,0,r.err);const result=JSON.parse(r.out);backup=result.backup;
  const dir=path.join(root,'backups',backup),manifest=JSON.parse(fs.readFileSync(path.join(dir,'manifest.json')));
- assert.equal(manifest.phase,'healthy');assert.equal(manifest.backupComplete,true);assert.equal(manifest.migrationStarted,true);
+ assert.equal(manifest.healthHost,'127.0.0.1');assert.equal(manifest.phase,'healthy');assert.equal(manifest.backupComplete,true);assert.equal(manifest.migrationStarted,true);
  assert.ok(fs.statSync(path.join(dir,'database.sql')).size>0);assert.equal(fs.statSync(dir).mode&0o077,0);assert.equal(fs.statSync(path.join(dir,'database.sql')).mode&0o077,0);
  assert.deepEqual(fs.readFileSync(envFile),original);assert.equal(fs.realpathSync(path.join(result.release,'.env')),envFile);
  assert.equal((await db('crm_clients').first()).notes,'DO NOT OVERWRITE');assert.deepEqual(await db('users').first(),originalUser);assert.deepEqual(await db('crm_activity_history').first(),history);

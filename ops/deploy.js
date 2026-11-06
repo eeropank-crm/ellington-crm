@@ -7,14 +7,15 @@ const crypto=require('node:crypto');
 const {spawnSync}=require('node:child_process');
 const {inspect,validate,diagnostics,fingerprint,sha}=require('./schema');
 const database=require('./database');
+const {healthHost,smoke}=require('./health-check');
 const transition=require('./legacy-transition');
 const audit=require('./data-audit');
 process.umask(0o077);
 const source=path.resolve(__dirname,'..');
 const required=['package.json','package-lock.json','public/index.html','private/dashboard.html','private/v8/prototuup_v8.html','server/index.js','server/app.js','server/db.js','server/session.js','server/auth.js','server/work-mode.js',
  'server/routes/login.js','server/routes/account.js','server/routes/crm.js','server/routes/crm_v8_extension.js','server/routes/crm_budget_extension.js','server/routes/crm_mail_extension.js','server/routes/crm_imap_extension.js','server/services/activity-workflow.js',
- 'database/001_users.sql','database/002_sessions.sql','database/migrations/001_base.js','database/migrations/002_v8.js','database/migrations/003_v8_lookup_indexes.js','database/migrations/004_legacy_v8_transition.js','ops/legacy-transition.js','ops/legacy-v8-profile.json','ops/data-audit.js','ops/legacy-transition-guards.sql','ops/schema-values.js','ops/schema-diagnostics.sql','ops/schema-contract.json','ops/schema.js','ops/database.js','ops/sql-mode.js','ops/deploy.js','ops/pm2-control.js'];
-const flags=new Set(['env','host','database','root','control','revision','backup','dump-command','client-command','maintenance-confirmed','offline','restored','diagnostics']);
+ 'database/001_users.sql','database/002_sessions.sql','database/migrations/001_base.js','database/migrations/002_v8.js','database/migrations/003_v8_lookup_indexes.js','database/migrations/004_legacy_v8_transition.js','ops/legacy-transition.js','ops/legacy-v8-profile.json','ops/data-audit.js','ops/legacy-transition-guards.sql','ops/schema-values.js','ops/schema-diagnostics.sql','ops/schema-contract.json','ops/schema.js','ops/database.js','ops/health-check.js','ops/sql-mode.js','ops/deploy.js','ops/pm2-control.js'];
+const flags=new Set(['env','host','database','root','control','revision','backup','dump-command','client-command','maintenance-confirmed','offline','restored','diagnostics','health-host']);
 function args(argv){
  const [command,...rest]=argv, out={command};
  for(let i=0;i<rest.length;i++){
@@ -25,6 +26,7 @@ function args(argv){
  }
  if(!['preflight','apply','rollback','restore-empty'].includes(command))throw Error('Käsk: preflight | apply | rollback | restore-empty.');
  for(const k of ['env','host','database'])if(!out[k])throw Error('Nõutud on --env, --host ja --database.');
+ if(out['health-host']!==undefined)healthHost(out['health-host']);
  return out;
 }
 function run(cmd,argv,options={}){
@@ -72,19 +74,6 @@ function stop(options,dir,config){
  if(control(options,'stop',dir,config)!==0)throw Error('Rakenduse peatamine ebaõnnestus.');
  if(control(options,'status',dir,config)!==3)throw Error('Rakendus ei ole kinnitatult peatatud.');
 }
-async function smoke(config,revision){
- const port=Number(config.env.PORT||3000);if(!Number.isInteger(port)||port<1024||port>65535)throw Error('Vigane rakenduseport.');
- let ok=false;
- for(let i=0;i<20;i++){
-  try{const response=await fetch('http://127.0.0.1:'+port+'/health',{signal:AbortSignal.timeout(2000)});const data=await response.json();if(response.status===200&&data.status==='ok'&&(!revision||data.release===revision)){ok=true;break;}}catch{}
-  await new Promise(r=>setTimeout(r,500));
- }
- if(!ok)throw Error('Uue väljalaske tervisekontroll ebaõnnestus.');
- for(const [url,status] of [['/api/me',401],['/prototype-preview',302]]){
-  const response=await fetch('http://127.0.0.1:'+port+url,{redirect:'manual',signal:AbortSignal.timeout(5000)});
-  if(response.status!==status)throw Error('Anonüümse ligipääsu kontroll ebaõnnestus.');
- }
-}
 function linkRuntime(release,old,config){
  const file=path.join(release,'.env');
  try{if(fs.lstatSync(file).isDirectory())throw Error('Väljalaske .env ei tohi olla kaust.');fs.unlinkSync(file);}catch(e){if(e.code!=='ENOENT')throw e;}
@@ -119,7 +108,7 @@ async function apply(options,config,db,root){
  const initial=await inspect(db);await checkPlan(db,initial);
  const id=new Date().toISOString().replace(/[-:.]/g,'')+'-'+crypto.randomBytes(4).toString('hex');
  const dir=privateDir(path.join(root,'backups',id)),release=path.join(root,'releases',id);
- const manifest={id,root,old,release,revision:releaseInfo.revision,envPath:config.envPath,envHash:config.hash,phase:'prepared',backupComplete:false,migrationStarted:false};
+ const manifest={id,root,old,release,revision:releaseInfo.revision,envPath:config.envPath,envHash:config.hash,healthHost:healthHost(options['health-host']),phase:'prepared',backupComplete:false,migrationStarted:false};
  const save=()=>writeJSON(path.join(dir,'manifest.json'),manifest);
  save();let stopped=false;
  try{
@@ -150,7 +139,7 @@ async function apply(options,config,db,root){
   for(const [table,count]of Object.entries(manifest.counts))if(!['knex_migrations','knex_migrations_lock','crm_v8_stop_reasons'].includes(table)&&afterCounts[table]!==count)throw Error('Olemasoleva tabeli kirjete arv muutus ootamatult: '+table);
   manifest.afterSchemaHash=fingerprint(after);manifest.phase='migrated';save();
   unchangedEnv(config);switchTo(root,release);manifest.phase='switched';save();
-  start(options,release,config,options.revision);await smoke(config,options.revision);
+  start(options,release,config,options.revision);await smoke(config,options.revision,options['health-host']);
   manifest.phase='healthy';save();console.log(JSON.stringify({ok:true,backup:id,revision:options.revision,release}));
  }catch(error){
   manifest.phase='failed';manifest.failure=error.message;save();
@@ -180,6 +169,7 @@ async function restoreEmpty(options,config,db,root){
 async function rollback(options,config,db,root){
  if(!options['maintenance-confirmed'])throw Error('Taastamine nõuab hoolduspausi kinnitamist.');
  const {dir,manifest}=loadBackup(root,options.backup);
+ const restoreHealthHost=healthHost(options['health-host']??manifest.healthHost);
  const schema=await inspect(db);
  if(manifest.migrationStarted){
   if(!options.restored)throw Error('Ühesuunalised migratsioonid: taasta SQL esmalt eraldi tühja andmebaasi ja kasuta --restored.');
@@ -191,7 +181,7 @@ async function rollback(options,config,db,root){
  privateDir(restored);run('tar',['-xzf',path.join(dir,'code.tar.gz'),'-C',restored]);
  install(restored,options);linkRuntime(restored,live,config);unchangedEnv(config);
  stop(options,live,config);switchTo(root,restored);
- try{start(options,restored,config);await smoke(config);}
+ try{start(options,restored,config);await smoke(config,undefined,restoreHealthHost);}
  catch(e){try{stop(options,restored,config);}catch{}throw Error('Taastatud koodi tervisekontroll ebaõnnestus; rakendus jäeti peatatud olekusse.');}
  writeJSON(path.join(dir,'rollback.json'),{backup:manifest.id,release:restored,envPath:config.envPath,restoredDatabase:!!options.restored});
  console.log(JSON.stringify({ok:true,release:restored,databaseRestored:!!options.restored}));
