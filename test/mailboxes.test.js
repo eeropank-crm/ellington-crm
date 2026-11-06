@@ -143,3 +143,18 @@ test('setup checks the confirmed account identities and prevents colliding with 
  const conflict={CRM_IMAP_ENABLED:'1',CRM_IMAP_HOST:'imap.zone.eu',CRM_MAILBOX_1:'INDREK.MAE@ELLINGTON.EE',CRM_MAIL_PASSWORD_1:secret};
  assert.throws(()=>setup.validateAccounts(rows,conflict),/MAILBOX_CONFLICT/);
 });
+test('Video tutvustus sends HTML plus unchanged text and completes the original activity exactly once',async()=>{
+ acting=users[0];const item=await fixture(users[0],'video presentation');
+ const body='Tere!\n\nVaata meie videot: https://www.youtube.com/watch?v=Hu6P50nQzbQ\n\nParimate soovidega\nEllington';
+ const [template]=await db('crm_templates').insert({name:'Video tutvustus',purpose:'Video tutvustus',type:'E-kiri',subject:'Synthetic video',body,is_active:1});
+ const before=await db('crm_clients').where({id:item.client}).first();
+ const request={contact_id:item.contact,recipient:item.recipient,subject:'Synthetic video',body,template_id:template,purpose:'Video tutvustus'};
+ const count=calls.length;const result=await api('/api/mail/activity/'+item.activity+'/send',request);
+ assert.equal(calls.length,count+1);assert.equal(calls.at(-1).message.text,body);assert.ok(calls.at(-1).message.html.includes('i.ytimg.com/vi/Hu6P50nQzbQ/hqdefault.jpg'));assert.ok(calls.at(-1).message.html.includes('&#9654;'));
+ const sent=await db('crm_email_outbox').where({activity_id:item.activity}).first();assert.equal(sent.body,body);assert.equal(sent.status,'sent');assert.equal(sent.message_id,calls.at(-1).message.messageId);
+ assert.equal((await db('crm_activities').where({id:item.activity}).first()).status,'completed');assert.equal((await db('crm_clients').where({id:item.client}).first()).followup_count,before.followup_count+1);
+ assert.equal((await db('crm_activity_details').where({activity_id:item.activity}).first()).instructions,body);
+ const followups=await db('crm_activities').where({client_id:item.client,status:'active'});assert.equal(followups.length,1);assert.equal(Number(followups[0].id),Number(result.completion.next_activity_id));
+ const history=await db('crm_v8_activity_events').where({activity_id:item.activity,event_type:'completed_default_followup'});assert.equal(history.length,1);
+ await api('/api/mail/activity/'+item.activity+'/send',request,409);assert.equal(calls.length,count+1);assert.equal((await db('crm_clients').where({id:item.client}).first()).followup_count,before.followup_count+1);
+});

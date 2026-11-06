@@ -5,6 +5,7 @@ const nodemailer=require('nodemailer');
 const crypto=require('crypto');
 const workflow=require('../services/activity-workflow');
 const mailboxes=require('../services/mailboxes');
+const mailContent=require('../services/mail-content');
 module.exports=function(db,options={}){
  const r=express.Router();
  const admin=(req,res)=>req.crmUser.role==='admin'||(res.status(403).json({error:'Ainult administraatorile.'}),false);
@@ -42,7 +43,8 @@ module.exports=function(db,options={}){
    if(!Number.isInteger(port)||port<1||port>65535)throw Error('Vigane SMTP port.');
    const transport=(options.createTransport||nodemailer.createTransport)({host:config.smtp.host,port,secure:config.smtp.secure,auth:{user:config.address,pass:config.password},requireTLS:port!==465,tls:{minVersion:'TLSv1.2',rejectUnauthorized:true},connectionTimeout:12000,greetingTimeout:12000,socketTimeout:20000});
    try {
-     info=await transport.sendMail({from:{name:req.crmUser.name+' | Ellington',address:config.address},to:reserved.recipient,subject,text:body,messageId:reserved.messageId,replyTo:config.address});
+     const content=mailContent.render({body,purpose:reserved.purpose});
+     info=await transport.sendMail({from:{name:req.crmUser.name+' | Ellington',address:config.address},to:reserved.recipient,subject,text:content.text,html:content.html,messageId:reserved.messageId,replyTo:config.address});
      if(!Array.isArray(info.accepted)||!info.accepted.some(a=>String(a).toLowerCase()===reserved.recipient.toLowerCase()))throw Error('SMTP ei kinnitanud saaja vastuvõtmist.');
    } finally { if(typeof transport.close==='function')transport.close(); }
  } catch(e) {

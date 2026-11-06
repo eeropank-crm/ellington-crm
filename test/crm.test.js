@@ -73,7 +73,7 @@ test('meeting results, postponing, stopping and mail send guard',async()=>{
   await api('/api/v8/activities/'+email+'/resolve',{},409);
   const contact=await db('crm_contacts').where({client_id:fixture.client}).first();
   await api('/api/mail/activity/'+email+'/send',{contact_id:contact.id,recipient:contact.email,subject:'Test',body:'Test'},409);
-  assert.equal(Number((await db('crm_email_outbox').count('* as n').first()).n),0);
+  assert.equal(Number((await db('crm_email_outbox').where({activity_id:email}).count('* as n').first()).n),0);
   await api('/api/clients/'+fixture.client+'/stop-monitoring',{reason:'Sünteetilise testi lõpetamine'});
   assert.equal(Number((await db('crm_activities').where({client_id:fixture.client,status:'active'}).count('* as n').first()).n),0);
   await db('crm_clients').where({id:fixture.client}).update({stop_reason:null});
