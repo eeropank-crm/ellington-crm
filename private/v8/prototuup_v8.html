@@ -563,8 +563,9 @@ function renderDashboard(){
  if(!crmQueues)return '<h2>Töölaud</h2><p class="muted">Laadin päevaplaani…</p>';
  const lane=tab==='overdue'?'overdue':'today';
  const q=crmQueues.queues[lane],busy=v8Pending||!!v8Active||!!v8Action||!!v8Stop;
+ const total=key=>crmQueues.queues[key].total+(key==='today'?crmQueues.unplanned.total:0);
  const cards=[['today','activities'],['overdue','overdue']].map(([key,t])=>{
-  const item=crmQueues.queues[key];return `<button class="card ${tab===t?'active':''}" onclick="switchTab('${t}')">${esc(item.title)}<strong>${item.shown}/${item.total}</strong><span class="muted">Näidatud / järjekorras kokku</span></button>`;
+  const item=crmQueues.queues[key];return `<button class="card ${tab===t?'active':''}" onclick="switchTab('${t}')">${esc(item.title)}<strong>${item.shown}/${total(key)}</strong><span class="muted">Töölaual / järjekorras kokku</span></button>`;
  }).join('')+`<button class="card ${tab==='warnings'?'active':''}" onclick="switchTab('warnings')">Käibehoiatused<strong>Ootel</strong><span class="muted">Vajab Ionprindi ühendust</span></button>`;
  const header=`<h2>Töölaud · ${esc(crmQueues.work_date)}</h2><div class="cards">${cards}</div>`;
  const replies=alerts?`<h2>Klientide vastused · ${crmReplyAlerts.length}</h2><div class="stack">${alerts}</div>`:'';
@@ -575,7 +576,7 @@ function renderDashboard(){
  const navigation=crmQueues.read_only?`<div class="choices"><button ${q.page===0||busy?'disabled':''} onclick="crmQueuePage('${lane}',-1)">Eelmised</button><button ${!q.has_next||busy?'disabled':''} onclick="crmQueuePage('${lane}',1)">Järgmised</button></div>`:
   `<button class="primary" ${!q.can_next||busy?'disabled':''} onclick="crmQueueNext('${lane}')">Võta järgmised</button>`;
  const explanation=crmQueues.read_only?'Administraatori ülevaade kõigi töötajate järjekordadest. Päevaplaani valimiseks kasuta tavakasutaja režiimi.':`Selles valikus ${q.selected} tegevust; praegu kuvatud ${q.shown}. Lõpetatud või edasi lükatud tegevuste asemele uusi automaatselt ei lisata.`;
- return `${header}<section class="panel"><h3>${esc(q.title)} · ${q.shown}/${q.total}</h3><p class="muted">${esc(explanation)}</p><p class="small muted">Veel kuvamata: ${q.waiting}</p>${navigation}${fill}</section>${renderTasks(tasks)}${!q.items.length?'<p class="muted">Selles valikus praegu tegevusi ei ole.</p>':''}${replies}`;
+ return `${header}<section class="panel"><h3>${esc(q.title)} · ${q.shown}/${total(lane)}</h3><p class="muted">${esc(explanation)}</p><p class="small muted">Veel järjekorras: ${total(lane)-q.shown}</p>${lane==='today'?`<p class="small muted">Kokku ${q.total} tänase kuupäevaga tegevust ja ${waiting.total} planeerimist ootavat klienti.</p>`:''}${navigation}${fill}</section>${renderTasks(tasks)}${!q.items.length?'<p class="muted">Selles valikus praegu tegevusi ei ole.</p>':''}${replies}`;
 }
 async function crmQueueNext(lane,fill=false){
  if(v8Pending||v8Active||v8Action||v8Stop||!crmQueues)return;
