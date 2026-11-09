@@ -145,19 +145,23 @@ test('user scope and administrator overview cannot reassign or complete another 
  await api('/v8/activities/'+fixtures.otherActivity+'/resolve',{comment:'Admin must reject'},403,adminCookie);
  assert.deepEqual(await snapshot(),before);assert.equal(Number((await db('crm_work_queue_days').count('* as n').first()).n),count);
 });
-test('next day reclassifies unfinished returning-client tasks as overdue without creating copies',async()=>{
+test('next day keeps unfinished tasks as overdue and fills only new daily slots without copying old work',async()=>{
  const current=await view(),ids=current.queues.today.items.filter(a=>fixtures.unplanned.includes(a.client_id)).map(a=>a.id),before=await snapshot();
  const tomorrow=await queues.read(db,a,{day:shift(1)});assert.equal(tomorrow.initialized,false);assert.equal(tomorrow.unplanned.total,8);
  const initialized=await queues.select(db,a,{action:'initialize'},shift(1));assert.equal(initialized.work_date,shift(1));
  const plans=await db('crm_work_queue_days').where({owner_user_id:a.id});assert.equal(plans.length,2);
- const shown=[];
- for(let page=0;;page++){
-  const result=await queues.read(db,{...admin,role:'admin'},{day:shift(1),pages:{overdue:page}});
-  shown.push(...result.queues.overdue.items);
-  if(!result.queues.overdue.has_next||ids.every(id=>shown.some(a=>a.id===id)))break;
+ const overdue=await db('crm_activities').whereIn('id',ids).select('id','status','due_date');
+ assert.equal(overdue.length,ids.length);assert.ok(overdue.every(a=>a.status==='active'&&w.dateOnly(a.due_date)<shift(1)));
+ const ownDay=await queues.read(db,a,{day:shift(1)});assert.ok(ownDay.queues.overdue.total>=ids.length);
+ const after=await snapshot();
+ for(const table of Object.keys(before)){
+  const field=table==='crm_activity_details'?'activity_id':'id',oldIds=new Set(before[table].map(row=>String(row[field])));
+  assert.deepEqual(after[table].filter(row=>oldIds.has(String(row[field]))),before[table]);
+  if(!['crm_activities','crm_activity_details','crm_v8_activity_events'].includes(table))assert.deepEqual(after[table],before[table]);
  }
- assert.ok(ids.every(id=>shown.some(a=>a.id===id)));
- assert.deepEqual(await snapshot(),before);
+ const oldIds=new Set(before.crm_activities.map(row=>String(row.id))),created=after.crm_activities.filter(row=>!oldIds.has(String(row.id)));
+ assert.equal(created.length,Math.min(6-Math.min(6,tomorrow.queues.today.total),tomorrow.unplanned.total));
+ assert.equal(new Set(created.map(row=>row.client_id)).size,created.length);
 });
 test('corrupted saved state fails closed and does not manufacture replacement selections',async()=>{
  const plan=await db('crm_work_queue_days').where({owner_user_id:a.id,work_date:day}).first(),before=await snapshot();

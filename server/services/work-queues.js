@@ -10,6 +10,8 @@ function stateOf(row){
  let state;try{state=JSON.parse(row.state);}catch{error(409,'Päevaplaani andmed vajavad kontrollimist.');}
  if(!state||LANES.some(lane=>!state[lane]||!Array.isArray(state[lane].ids)||!Array.isArray(state[lane].seen)||state[lane].ids.length>LIMIT||!Number.isSafeInteger(state[lane].batch)||state[lane].batch<0||[...state[lane].ids,...state[lane].seen].some(id=>!Number.isSafeInteger(id)||id<1)||new Set(state[lane].ids).size!==state[lane].ids.length||new Set(state[lane].seen).size!==state[lane].seen.length||state[lane].ids.some(id=>!state[lane].seen.includes(id))))error(409,'Päevaplaani andmed vajavad kontrollimist.');
  const all=LANES.flatMap(lane=>state[lane].seen);if(new Set(all).size!==all.length)error(409,'Päevaplaan sisaldab korduvaid tegevusi.');
+ if(state.template_id!=null&&(!Number.isSafeInteger(state.template_id)||state.template_id<1))error(409,'Päevaplaani vaikemall vajab kontrollimist.');
+ if(state.daily_ready!=null&&typeof state.daily_ready!=='boolean')error(409,'Päevaplaani algseadistus vajab kontrollimist.');
  return state;
 }
 function date(day){if(!w.validDate(day))error(400,'Vigane tööpäev.');return day;}
@@ -38,6 +40,46 @@ async function pools(db,user,day){
   .orderByRaw('last_contact IS NOT NULL ASC').orderBy('last_contact').orderBy('c.id');
  return {...result,candidates};
 }
+async function dailyTemplate(trx,user,day,state) {
+ let id=state.template_id;
+ if(!id){
+  const history=await trx('crm_work_queue_days').where({owner_user_id:user.id}).where('work_date','<',day).orderBy('work_date','desc').limit(90);
+  for(const previous of history){
+   const saved=stateOf(previous);
+   if(saved.template_id){id=saved.template_id;break;}
+   // Upgrade legacy selections without borrowing another user's default.
+   if(saved.today.ids.length){
+    const rows=await trx('crm_activities as a').leftJoin('crm_activity_details as d','d.activity_id','a.id')
+     .whereIn('a.id',saved.today.ids).where('a.owner_user_id',user.id).whereNot('a.status','cancelled').whereNotNull('d.template_id').select('d.template_id');
+    const ids=[...new Set(rows.map(r=>Number(r.template_id)))];
+    if(ids.length>1)return null;
+    if(ids.length===1&&Number.isSafeInteger(ids[0])&&ids[0]>0){id=ids[0];break;}
+   }
+  }
+ }
+ if(!id)return null;
+ const template=await trx('crm_templates').where({id,is_active:1}).first();
+ if(!template)return null;
+ try{
+  await w.planned(trx,{type:template.type,template_id:template.id,purpose:template.purpose||template.name,subject:template.subject||'',instructions:template.body||'',due_date:day});
+  w.chain(template.next_step_json);
+ }catch(e){if(e instanceof w.WorkflowError)return null;throw e;}
+ return template;
+}
+async function fillCandidates(trx,user,day,candidates,template,slots){
+ const ids=[];
+ if(slots<=0)return ids;
+ for(const candidate of candidates){
+  const client=await w.lockClient(trx,candidate.id,user);
+  if(client.stop_reason)continue;
+  // Current reads also see work/replies committed while the client lock waited.
+  if(await trx('crm_activities').where({client_id:candidate.id,status:'active'}).forUpdate().first('id'))continue;
+  if(await trx('crm_email_inbox').where({client_id:candidate.id}).whereNull('handled_at').forUpdate().first('id'))continue;
+  const created=await w.create(trx,user,{client_id:Number(candidate.id),type:template.type,template_id:template.id,purpose:template.purpose||template.name,instructions:template.body||'',subject:template.subject||'',due_date:day});
+  ids.push(Number(created.id));if(ids.length===slots)break;
+ }
+ return ids;
+}
 async function read(db,user,{day=w.today(),pages={}}={}){
  date(day);
  const admin=user.role==='admin';
@@ -56,9 +98,10 @@ async function read(db,user,{day=w.today(),pages={}}={}){
  const slots=reset?LIMIT:LIMIT-state.today.ids.length;
  const pending=available.today.some(a=>!state.today.seen.includes(Number(a.id)));
  const unplanned={total:available.candidates.length,slots,can_fill:!admin&&!!plan&&slots>0&&!pending&&available.candidates.length>0};
- return {work_date:day,limit:LIMIT,read_only:admin,initialized:!!plan,version:plan?.version??null,queues,unplanned,revenue_warnings:{available:false}};
+ const needsDailyFill=!admin&&(!state.daily_ready||(state.today.ids.length<LIMIT&&(pending||!!state.template_id&&available.candidates.length>0)));
+ return {work_date:day,limit:LIMIT,read_only:admin,initialized:!!plan,daily_ready:!!state.daily_ready,needs_daily_fill:needsDailyFill,default_template_id:state.template_id||null,version:plan?.version??null,queues,unplanned,revenue_warnings:{available:false}};
 }
-async function select(db,user,input={},day=w.today()){
+async function selectOnce(db,user,input,day){
  date(day);
  if(user.role==='admin')error(403,'Päevaplaani valimiseks lülitu tavakasutaja režiimi.');
  if(!['initialize','next','fill'].includes(input.action)||Object.keys(input).some(k=>!['action','lane','version','work_date','template_id'].includes(k)))error(400,'Vigane päevaplaani toiming.');
@@ -67,10 +110,31 @@ async function select(db,user,input={},day=w.today()){
   if(!actor)error(403,'Kasutaja pole aktiivne.');
   let plan=await trx('crm_work_queue_days').where({owner_user_id:user.id,work_date:day}).first();
   if(input.action==='initialize'){
-   if(plan)return read(trx,user,{day});
-   const state=empty(),available=await pools(trx,user,day);
-   for(const lane of ['overdue','today'])state[lane].ids=state[lane].seen=available[lane].slice(0,LIMIT).map(a=>Number(a.id));
-   await trx('crm_work_queue_days').insert({owner_user_id:user.id,work_date:day,version:1,state:JSON.stringify(state)});
+   const state=stateOf(plan);
+   const available=await pools(trx,user,day);
+   const unused=LIMIT-state.today.ids.length;
+   const additions=unused>0&&(available.today.some(a=>!state.today.seen.includes(Number(a.id)))||!!state.template_id&&available.candidates.length>0);
+   if(state.daily_ready&&!additions)return read(trx,user,{day});
+   if(!plan){
+    for(const lane of LANES){state[lane].ids=available[lane].slice(0,LIMIT).map(a=>Number(a.id));state[lane].seen=[...state[lane].ids];}
+   }else{
+    // Upgrade today's saved plan without reopening already consumed slots.
+    const dated=available.today.filter(a=>!state.today.seen.includes(Number(a.id))).slice(0,LIMIT-state.today.ids.length).map(a=>Number(a.id));
+    state.today.ids.push(...dated);state.today.seen.push(...dated);
+   }
+   const template=await dailyTemplate(trx,user,day,state);
+   if(template){
+    state.template_id=Number(template.id);
+    if(!available.today.some(a=>!state.today.seen.includes(Number(a.id)))){
+     const ids=await fillCandidates(trx,user,day,available.candidates,template,LIMIT-state.today.ids.length);
+     state.today.ids.push(...ids);state.today.seen.push(...ids);
+    }
+   }
+   if(!template)delete state.template_id;
+   state.daily_ready=true;
+   const encoded=JSON.stringify(state);if(Buffer.byteLength(encoded)>60000)error(409,'Päevaplaani maht on täis. Jätka kliendikaardilt.');
+   if(plan)await trx('crm_work_queue_days').where({id:plan.id}).update({state:encoded,version:plan.version+1,updated_at:trx.fn.now()});
+   else await trx('crm_work_queue_days').insert({owner_user_id:user.id,work_date:day,version:1,state:encoded});
    return read(trx,user,{day});
   }
   if(!plan||input.work_date!==day||!Number.isSafeInteger(input.version)||input.version!==plan.version)error(409,'Päevaplaan muutus. Värskenda töölauda.');
@@ -93,14 +157,8 @@ async function select(db,user,input={},day=w.today()){
    if(!Number.isSafeInteger(templateId)||templateId<1)error(400,'Vali olemasolev tegevusmall.');
    const template=await trx('crm_templates').where({id:templateId,is_active:1}).first();
    if(!template||!w.TYPES.includes(template.type))error(400,'Vali olemasolev tegevusmall.');
-   for(const candidate of available.candidates){
-    await w.lockClient(trx,candidate.id,user);
-    // Locking reads see work committed while this transaction waited for the client.
-    if(await trx('crm_activities').where({client_id:candidate.id,status:'active'}).forUpdate().first('id'))continue;
-    if(await trx('crm_email_inbox').where({client_id:candidate.id}).whereNull('handled_at').forUpdate().first('id'))continue;
-    const created=await w.create(trx,user,{client_id:Number(candidate.id),type:template.type,template_id:template.id,purpose:template.purpose||template.name,instructions:template.body||'',subject:template.subject||'',due_date:day});
-    ids.push(Number(created.id));if(ids.length===slots)break;
-   }
+   ids.push(...await fillCandidates(trx,user,day,available.candidates,template,slots));
+   state.template_id=Number(template.id);state.daily_ready=true;
   }else ids.push(...available[lane].filter(a=>!state[lane].seen.includes(Number(a.id))).slice(0,LIMIT).map(a=>Number(a.id)));
   if(!ids.length)error(409,'Sobivaid tegevusi ei ole enam järjekorras. Värskenda töölauda.');
   state[lane]={ids:filling?[...state[lane].ids,...ids]:ids,seen:[...state[lane].seen,...ids],batch:state[lane].batch+(filling?0:1)};
@@ -108,5 +166,13 @@ async function select(db,user,input={},day=w.today()){
   await trx('crm_work_queue_days').where({id:plan.id}).update({state:encoded,version:plan.version+1,updated_at:trx.fn.now()});
   return read(trx,user,{day});
  });
+}
+async function select(db,user,input={},day=w.today()){
+ // No external side effects occur inside these transactions. A deadlock rolls
+ // back the entire batch, so retrying cannot send mail or duplicate a commit.
+ for(let attempt=0;;attempt++){
+  try{return await selectOnce(db,user,input,day);}
+  catch(e){if(e.code!=='ER_LOCK_DEADLOCK'||attempt>=2)throw e;}
+ }
 }
 module.exports={read,select,stateOf,LIMIT,LANES};
