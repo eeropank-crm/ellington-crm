@@ -60,7 +60,10 @@ test('mode switch persists across requests and does not mutate CRM, users, count
   const rows=(await request(endpoint)).data.activities;assert.ok(rows.some(a=>a.id===ownActivity));assert.ok(rows.some(a=>a.id===otherActivity));
  }
  await request('/clients/'+fixture.client);
- assert.ok((await request('/clients?search='+encodeURIComponent('Sünteetiline'))).data.clients.some(c=>c.id===fixture.client));
+ // Search the fixture precisely: the endpoint intentionally returns at most 50
+ // matches, so unrelated synthetic clients must not hide it on the first page.
+ const target=await db('crm_clients').where({id:fixture.client}).first('name');
+ assert.ok((await request('/clients?search='+encodeURIComponent(target.name))).data.clients.some(c=>c.id===fixture.client));
  await request('/work-mode',{mode:'user'});assert.deepEqual(await snapshot(),initial);
  await request('/clients/'+fixture.client,undefined,403);
 });

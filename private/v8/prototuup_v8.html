@@ -572,7 +572,8 @@ function renderDashboard(){
  if(tab==='warnings')return header+'<section class="panel"><h3>Käibehoiatused</h3><p class="muted">See koht on reserveeritud käibelangusega klientide tegevustele. Hoiatused lisanduvad pärast Ionprindi andmeühenduse valmimist.</p></section>'+replies;
  const tasks=q.items.map(crmTask);
  const waiting=crmQueues.unplanned;
- const fill=lane==='today'?`<div class="divider"></div><p class="muted">${waiting.total} varem suheldud avatud klienti ootab järgmise tegevuse planeerimist.</p>${!crmQueues.read_only&&waiting.can_fill?`<label for="crmQueueTemplate">Tegevusmall vabade kohtade täitmiseks</label><select id="crmQueueTemplate" ${busy||!waiting.can_fill?'disabled':''} onchange="crmQueueTemplate=this.value"><option value="">Vali tegevusmall</option>${data.templates.map(t=>`<option value="${esc(t.id)}" ${String(t.id)===String(crmQueueTemplate)?'selected':''}>${esc(t.type)} · ${esc(t.purpose||t.name)}</option>`).join('')}</select><p class="small muted">Kuupäevaga tegevused on eespool. Valik lisab kuni ${waiting.slots} tegevust tänasesse plaani; kirju automaatselt ei saadeta.</p><button class="primary" ${busy||!waiting.can_fill?'disabled':''} onclick="crmQueueNext('today',true)">Täida vabad kohad klientidega</button>`:''}`:'';
+ if(!crmQueueTemplate&&crmQueues.default_template_id)crmQueueTemplate=String(crmQueues.default_template_id);
+ const fill=lane==='today'?`<div class="divider"></div><p class="muted">${waiting.total} varem suheldud avatud klienti ootab järgmise tegevuse planeerimist.</p>${!crmQueues.read_only&&waiting.can_fill&&!crmQueues.default_template_id?'<p class="muted">Automaatseks päevaplaaniks vali allpool tegevusmall ja täida vabad kohad. Valik jääb ka järgmiste päevade vaikemalliks.</p>':''}${!crmQueues.read_only&&waiting.can_fill?`<label for="crmQueueTemplate">Tegevusmall vabade kohtade täitmiseks (ka järgmise päeva vaikemall)</label><select id="crmQueueTemplate" ${busy||!waiting.can_fill?'disabled':''} onchange="crmQueueTemplate=this.value"><option value="">Vali tegevusmall</option>${data.templates.map(t=>`<option value="${esc(t.id)}" ${String(t.id)===String(crmQueueTemplate)?'selected':''}>${esc(t.type)} · ${esc(t.purpose||t.name)}</option>`).join('')}</select><p class="small muted">Kuupäevaga tegevused on eespool. Valik lisab kuni ${waiting.slots} tegevust tänasesse plaani; kirju automaatselt ei saadeta.</p><button class="primary" ${busy||!waiting.can_fill?'disabled':''} onclick="crmQueueNext('today',true)">Täida vabad kohad klientidega</button>`:''}`:'';
  const navigation=crmQueues.read_only?`<div class="choices"><button ${q.page===0||busy?'disabled':''} onclick="crmQueuePage('${lane}',-1)">Eelmised</button><button ${!q.has_next||busy?'disabled':''} onclick="crmQueuePage('${lane}',1)">Järgmised</button></div>`:
   `<button class="primary" ${!q.can_next||busy?'disabled':''} onclick="crmQueueNext('${lane}')">Võta järgmised</button>`;
  const explanation=crmQueues.read_only?'Administraatori ülevaade kõigi töötajate järjekordadest. Päevaplaani valimiseks kasuta tavakasutaja režiimi.':`Selles valikus ${q.selected} tegevust; praegu kuvatud ${q.shown}. Lõpetatud või edasi lükatud tegevuste asemele uusi automaatselt ei lisata.`;
@@ -600,10 +601,13 @@ async function v8ReloadTasks(){
  const request=++crmQueueLoad;
  const params=crmRealMe?.role==='admin'?'?'+new URLSearchParams(Object.fromEntries(Object.entries(crmQueuePages).map(([lane,page])=>[lane+'_page',String(page)]))):'';
  const [x,result]=await Promise.all([v8Api('/v8/activities'),v8Api('/v8/work-queues'+params)]);
- let queues=result;
- if(!queues.read_only&&!queues.initialized)queues=await v8Api('/v8/work-queues/select',{method:'POST',body:JSON.stringify({action:'initialize'})});
+ let queues=result,activities=x.activities;
+ if(!queues.read_only&&(!queues.initialized||!queues.daily_ready||queues.needs_daily_fill)){
+  queues=await v8Api('/v8/work-queues/select',{method:'POST',body:JSON.stringify({action:'initialize'})});
+  activities=(await v8Api('/v8/activities')).activities;
+ }
  if(request!==crmQueueLoad)return;
- data.tasks=x.activities.map(crmTask);crmQueues=queues;
+ data.tasks=activities.map(crmTask);crmQueues=queues;
 }
 async function crmRefresh(){
  const results=await Promise.allSettled([v8ReloadTasks(),crmLoadReplyAlerts(false)]);
