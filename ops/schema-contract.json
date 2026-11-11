@@ -155,7 +155,12 @@
     {"TABLE_NAME":"crm_work_queue_days","COLUMN_NAME":"version","COLUMN_TYPE":"int(10) unsigned","IS_NULLABLE":"NO","COLUMN_DEFAULT":"0","EXTRA":"","CHARACTER_SET_NAME":null},
     {"TABLE_NAME":"crm_work_queue_days","COLUMN_NAME":"state","COLUMN_TYPE":"text","IS_NULLABLE":"NO","COLUMN_DEFAULT":null,"EXTRA":"","CHARACTER_SET_NAME":"utf8mb4"},
     {"TABLE_NAME":"crm_work_queue_days","COLUMN_NAME":"created_at","COLUMN_TYPE":"timestamp","IS_NULLABLE":"NO","COLUMN_DEFAULT":"current_timestamp()","EXTRA":"","CHARACTER_SET_NAME":null},
-    {"TABLE_NAME":"crm_work_queue_days","COLUMN_NAME":"updated_at","COLUMN_TYPE":"timestamp","IS_NULLABLE":"NO","COLUMN_DEFAULT":"current_timestamp()","EXTRA":"","CHARACTER_SET_NAME":null}
+    {"TABLE_NAME":"crm_work_queue_days","COLUMN_NAME":"updated_at","COLUMN_TYPE":"timestamp","IS_NULLABLE":"NO","COLUMN_DEFAULT":"current_timestamp()","EXTRA":"","CHARACTER_SET_NAME":null},
+    {"TABLE_NAME":"crm_user_mail_settings","COLUMN_NAME":"user_id","COLUMN_TYPE":"bigint(20) unsigned","IS_NULLABLE":"NO","COLUMN_DEFAULT":null,"EXTRA":"","CHARACTER_SET_NAME":null},
+    {"TABLE_NAME":"crm_user_mail_settings","COLUMN_NAME":"signature","COLUMN_TYPE":"text","IS_NULLABLE":"NO","COLUMN_DEFAULT":null,"EXTRA":"","CHARACTER_SET_NAME":"utf8mb4"},
+    {"TABLE_NAME":"crm_user_mail_settings","COLUMN_NAME":"version","COLUMN_TYPE":"int(10) unsigned","IS_NULLABLE":"NO","COLUMN_DEFAULT":"1","EXTRA":"","CHARACTER_SET_NAME":null},
+    {"TABLE_NAME":"crm_user_mail_settings","COLUMN_NAME":"created_at","COLUMN_TYPE":"timestamp","IS_NULLABLE":"NO","COLUMN_DEFAULT":"current_timestamp()","EXTRA":"","CHARACTER_SET_NAME":null},
+    {"TABLE_NAME":"crm_user_mail_settings","COLUMN_NAME":"updated_at","COLUMN_TYPE":"timestamp","IS_NULLABLE":"NO","COLUMN_DEFAULT":"current_timestamp()","EXTRA":"","CHARACTER_SET_NAME":null}
   ],
   "indexes": [
     {"TABLE_NAME":"crm_activities","INDEX_NAME":"PRIMARY","NON_UNIQUE":0,"SEQ_IN_INDEX":1,"COLUMN_NAME":"id","SUB_PART":null},
@@ -202,6 +207,7 @@
     {"TABLE_NAME":"crm_imported_history","INDEX_NAME":"crm_imported_history_client_id_index","NON_UNIQUE":1,"SEQ_IN_INDEX":1,"COLUMN_NAME":"client_id","SUB_PART":null},
     {"TABLE_NAME":"crm_work_queue_days","INDEX_NAME":"crm_work_queue_days_owner_user_id_work_date_unique","NON_UNIQUE":0,"SEQ_IN_INDEX":1,"COLUMN_NAME":"owner_user_id","SUB_PART":null},
     {"TABLE_NAME":"crm_work_queue_days","INDEX_NAME":"crm_work_queue_days_owner_user_id_work_date_unique","NON_UNIQUE":0,"SEQ_IN_INDEX":2,"COLUMN_NAME":"work_date","SUB_PART":null},
-    {"TABLE_NAME":"crm_work_queue_days","INDEX_NAME":"PRIMARY","NON_UNIQUE":0,"SEQ_IN_INDEX":1,"COLUMN_NAME":"id","SUB_PART":null}
+    {"TABLE_NAME":"crm_work_queue_days","INDEX_NAME":"PRIMARY","NON_UNIQUE":0,"SEQ_IN_INDEX":1,"COLUMN_NAME":"id","SUB_PART":null},
+    {"TABLE_NAME":"crm_user_mail_settings","INDEX_NAME":"PRIMARY","NON_UNIQUE":0,"SEQ_IN_INDEX":1,"COLUMN_NAME":"user_id","SUB_PART":null}
   ]
 }

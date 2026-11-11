@@ -3,7 +3,7 @@ const assert=require('node:assert/strict');
 const fs=require('node:fs');const path=require('node:path');const {spawnSync,spawn}=require('node:child_process');
 const {inspect,validate,fingerprint}=require('../ops/schema');const database=require('../ops/database');
 const contract=require('../ops/schema-contract.json');
-function reference(){return {version:'11.4.13-MariaDB',columns:structuredClone(contract.columns),indexes:structuredClone(contract.indexes),tables:[...new Set(contract.columns.map(c=>c.TABLE_NAME))].sort().map(TABLE_NAME=>({TABLE_NAME,TABLE_TYPE:'BASE TABLE',ENGINE:'InnoDB',TABLE_COLLATION:'utf8mb4_unicode_ci'})),triggers:[],checks:[],routines:[],charset:'utf8mb4',events:[],foreign:[],applied:['001_base.js','002_v8.js','003_v8_lookup_indexes.js','004_legacy_v8_transition.js','005_daily_work_queues.js'],locked:false};}
+function reference(){return {version:'11.4.13-MariaDB',columns:structuredClone(contract.columns),indexes:structuredClone(contract.indexes),tables:[...new Set(contract.columns.map(c=>c.TABLE_NAME))].sort().map(TABLE_NAME=>({TABLE_NAME,TABLE_TYPE:'BASE TABLE',ENGINE:'InnoDB',TABLE_COLLATION:'utf8mb4_unicode_ci'})),triggers:[],checks:[],routines:[],charset:'utf8mb4',events:[],foreign:[],applied:['001_base.js','002_v8.js','003_v8_lookup_indexes.js','004_legacy_v8_transition.js','005_daily_work_queues.js','006_user_mail_signatures.js'],locked:false};}
 test('schema gate rejects unsafe existing schemas without attempting repair',()=>{
  assert.equal(validate(reference(),true).ok,true);
  for(const mutate of [
@@ -63,7 +63,7 @@ after(async()=>{
 });
 test('read-only preflight inventories the tracked release and preserves schema and rows',{skip:!enabled},async()=>{
  const before=fingerprint(await inspect(db)),envHash=require('../ops/schema').sha(fs.readFileSync(envFile));
- const r=await cli('preflight',['--diagnostics']);assert.equal(r.status,0,r.err);const plan=JSON.parse(r.out);assert.equal(plan.ok,true);assert.deepEqual(plan.pending,['001_base.js','002_v8.js','003_v8_lookup_indexes.js','004_legacy_v8_transition.js','005_daily_work_queues.js']);assert.ok(plan.source.requiredFiles>20);assert.equal(plan.diagnostics.formatVersion,1);
+ const r=await cli('preflight',['--diagnostics']);assert.equal(r.status,0,r.err);const plan=JSON.parse(r.out);assert.equal(plan.ok,true);assert.deepEqual(plan.pending,['001_base.js','002_v8.js','003_v8_lookup_indexes.js','004_legacy_v8_transition.js','005_daily_work_queues.js','006_user_mail_signatures.js']);assert.ok(plan.source.requiredFiles>20);assert.equal(plan.diagnostics.formatVersion,1);
  await database.importDump(options,root,path.join(source,'ops/schema-diagnostics.sql'),path.resolve(process.env.DEPLOY_CLIENT_COMMAND));
  assert.equal(fingerprint(await inspect(db)),before);assert.equal(require('../ops/schema').sha(fs.readFileSync(envFile)),envHash);
  assert.equal((await db('crm_clients').first()).notes,'DO NOT OVERWRITE');
@@ -114,7 +114,7 @@ test('lookup index repair preserves synthetic records and is restartable',{skip:
   const name=indexes.find(i=>i.COLUMN_NAME===item.columns[0]).INDEX_NAME;
   await db.schema.alterTable(item.table,t=>t.dropIndex([],name));
  }
- await db('knex_migrations').whereIn('name',['003_v8_lookup_indexes.js','004_legacy_v8_transition.js','005_daily_work_queues.js']).delete();
+ await db('knex_migrations').whereIn('name',['003_v8_lookup_indexes.js','004_legacy_v8_transition.js','005_daily_work_queues.js','006_user_mail_signatures.js']).delete();
  assert.equal(validate(await inspect(db)).ok,true);
  await db.migrate.latest({directory:path.join(source,'database/migrations')});
  const after=await inspect(db);assert.equal(validate(after,true).ok,true);
@@ -156,7 +156,7 @@ test('startup failure rolls back code only without migrations, and leaves app st
   r=await invoke('rollback',path.join(source,'ops/test-control.js'),['--backup',first]);assert.equal(r.status,0,r.err);
   assert.match(fs.realpathSync(path.join(failRoot,'current')),/-rollback$/);
   // Simulate a known, restartable pending v8 migration on the synthetic schema.
-  await db('knex_migrations').whereIn('name',['002_v8.js','003_v8_lookup_indexes.js','004_legacy_v8_transition.js','005_daily_work_queues.js']).delete();
+  await db('knex_migrations').whereIn('name',['002_v8.js','003_v8_lookup_indexes.js','004_legacy_v8_transition.js','005_daily_work_queues.js','006_user_mail_signatures.js']).delete();
   r=await invoke('apply',failControl);assert.equal(r.status,1);
   const last=fs.readdirSync(path.join(failRoot,'backups')).sort().at(-1),failed=JSON.parse(fs.readFileSync(path.join(failRoot,'backups',last,'manifest.json')));
   assert.equal(failed.migrationStarted,true);assert.equal(failed.phase,'failed');

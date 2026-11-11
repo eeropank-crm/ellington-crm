@@ -1,0 +1,29 @@
+# Kasutajapõhised e-posti allkirjad
+
+E-kirja koostamisel lisatakse saatja salvestatud allkiri eraldi väljale kirja sisu alla. Saatmisel ühendatakse sisu ja allkiri üheks tekst- ja HTML-kirjaks. Allkirja saab selle kirja jaoks muuta või eemaldada. Nupp **Salvesta minu allkirjaks** salvestab muudatuse järgmisteks kirjadeks.
+
+Administraator saab administraatori töörežiimis avada **Kasutajad → Muuda allkirja** ja salvestada iga töötaja teksti. Kasutaja saab muuta ainult oma allkirja; administraatori õigusi kontrollitakse ka serveris. Samaaegne vananenud salvestus tagastab konflikti, mitte ei kirjuta uuemat teksti üle.
+
+Allkirjad tuleb pärast paigaldamist kasutajatele salvestada. Migratsioon ei sisalda töötajate kontaktandmeid ega vaikeallkirju. Allkirja e-posti tekst võib erineda saatva postkasti aadressist; funktsioon ei muuda sisselogimist ega SMTP/IMAP-seadeid.
+
+## Andmed ja paigaldus
+
+Migratsioon `006_user_mail_signatures.js` lisab ainult tabeli `crm_user_mail_settings` (kasutaja ID, tekst, versioon ja ajatemplid). Olemasolevaid migratsioone 001–005, kliendiandmeid ja ajalugu ei muudeta. Paigaldaja skeemileping ja lähtekoodi inventuur hõlmavad uut tabelit ning faile. Kasuta tavapärast range eelkontrolli ja kontrollitud täieliku varundamisega paigaldust; ühesuunalise migratsiooni korral kehtib olemasolev taastamisjuhend `docs/zone-deployment.md`.
+
+Saadetud kirja täielik tekst koos allkirjaga jääb väljuvate kirjade tabelisse ja lõpetamise ajalukku. Tegevuse alusjuhis ja järelkirja mall jäävad allkirjata. Tegevuse lõpetamine, järeltegevuste loendur ning saatmise kordamise kaitse säilivad. Allkirja piir on 3000 märki ja kogu saadetava teksti piir 10 000 märki. HTML-is kuvatakse allkirja tekst turvaliselt paomärkidega.
+
+## Kontrollimine
+
+Automaatkontroll: `test/mail-signatures.test.js` kontrollib koostamist, kasutajate eraldatust, õigusi, salvestamise konflikte, tekst/HTML-saatmist, ajalugu, järelkirja ja mahupiiranguid. SMTP on asendatud kohaliku mälus töötava testasendusega; päris kirju ei saadeta.
+
+Sünteetilise MariaDB 11.4.13 keskkonna tulemus: 99 meili-, tegevuse-, töörežiimi- ja järjekorratesti läbitud. Chromiumis kontrolliti allkirja kuvamist kirja all, oma allkirja salvestamist ning administraatori allkirjahaldust. JavaScripti vigu ega saatmispäringuid ei tekkinud. Ekraanipildid asuvad kataloogis `docs/email-signatures/`.
+
+Paigalduse, pärandskeemi, skeemiühilduvuse, tervisekontrolli ja ühenduse SQL-režiimi kontrollid: veel 33 testi läbitud, 0 ebaõnnestunud ja 0 vahele jäetud. Kokku läbisid kõik hoidla 132 automaattesti. Isoleeritud täispaigaldus kontrollis varukoopiaid, migratsioone ja andmesisu säilimist; taastamist kontrolliti eraldi tühja testandmebaasi kaudu. Zone.ee serveriga ühendust ei loodud.
+
+## Ühilduvus pärast PR #17 ühendamist
+
+PR #16 harusse ühendati värske main-haru koos PR #17 parandustega tavapärase merge-commit’i kaudu, ajalugu ümber kirjutamata. Säilivad kliendile vastamise vorm, vastuse käsitlemine alles pärast edukat saatmist, meilivestluse päised, 14-päevane vaikimisi ooteaeg ning kordusteta ajaloo kuvamine. Allkirja lisatakse üks kord ka uue töövoo vastuskirjale; allkiri ei kandu kontrollkõne juhisesse.
+
+Ühendatud versiooni 113 rakenduse regressioonitesti läbisid. Uus koostoimetest kontrollib vastuskirja tekst/HTML-allkirja, niidipäiseid, käsitlemise hetke ja allkirjata järeltegevust. Chromiumis läbis sama koostoime arvutis ja mobiilis; pilt `docs/email-signatures/reply-composer.png`. Lisaks läbisid kõik 33 paigalduse, migratsioonide, taastamise, skeemiühilduvuse, tervisekontrolli ja SQL-režiimi regressiooni. Ühendatud versiooni kõik 146 automaattesti läbitud: 0 ebaõnnestunud ja 0 vahele jäetud. Kontrollitud on ka oma allkirja salvestamine ning administraatori allkirjahaldus Chromiumis.
+
+Paigalduse testadapteri käivituskontroll asendati fikseeritud 500 ms ootelt piiratud tervisekontrolliga: elus PID ei tõenda veel, et vana testrakenduse HTTP-port on avatud. See puudutab ainult sünteetilist testadapterit; tootmise PM2-adapterit ega tervisekontrolli ei muudeta.

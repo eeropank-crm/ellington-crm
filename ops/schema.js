@@ -3,7 +3,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const crypto = require('node:crypto');
 const contract = require('./schema-contract.json');
-const migrations = ['001_base.js', '002_v8.js', '003_v8_lookup_indexes.js', '004_legacy_v8_transition.js', '005_daily_work_queues.js'];
+const migrations = ['001_base.js', '002_v8.js', '003_v8_lookup_indexes.js', '004_legacy_v8_transition.js', '005_daily_work_queues.js', '006_user_mail_signatures.js'];
 const {type,equalDefaults,describe}=require('./schema-values');
 const {lookups}=require('../database/migrations/003_v8_lookup_indexes');
 const additions = {
@@ -83,7 +83,7 @@ function validate(snapshot, final = false, transition = null) {
     if ((fk.TABLE_NAME==='users'&&fk.COLUMN_NAME==='name')||(fk.TABLE_NAME==='crm_templates'&&fk.COLUMN_NAME==='subject')) errors.push(fk.TABLE_NAME+'.'+fk.COLUMN_NAME+': muudetav veerg osaleb välisvõtmes.');
   }
   for (const [table, columns] of Object.entries(expected)) {
-    const creator=table==='crm_work_queue_days'?'005_daily_work_queues.js':base.has(table)?'001_base.js':'002_v8.js';
+    const creator=table==='crm_user_mail_settings'?'006_user_mail_signatures.js':table==='crm_work_queue_days'?'005_daily_work_queues.js':base.has(table)?'001_base.js':'002_v8.js';
     if (!actual[table]) {
       if (final || !pending.includes(creator)) errors.push(table+': tabel puudub, kuid selle loomise migratsioon pole ootel.');
       continue;
