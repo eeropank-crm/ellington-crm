@@ -25,3 +25,5 @@ Paigalduse, pärandskeemi, skeemiühilduvuse, tervisekontrolli ja ühenduse SQL-
 PR #16 harusse ühendati värske main-haru koos PR #17 parandustega tavapärase merge-commit’i kaudu, ajalugu ümber kirjutamata. Säilivad kliendile vastamise vorm, vastuse käsitlemine alles pärast edukat saatmist, meilivestluse päised, 14-päevane vaikimisi ooteaeg ning kordusteta ajaloo kuvamine. Allkirja lisatakse üks kord ka uue töövoo vastuskirjale; allkiri ei kandu kontrollkõne juhisesse.
 
 Ühendatud versiooni 113 rakenduse regressioonitesti läbisid. Uus koostoimetest kontrollib vastuskirja tekst/HTML-allkirja, niidipäiseid, käsitlemise hetke ja allkirjata järeltegevust. Chromiumis läbis sama koostoime arvutis ja mobiilis; pilt `docs/email-signatures/reply-composer.png`. Paigalduse kontrolli tulemused lisatakse kontrollimise järel.
+
+Paigalduse testadapteri käivituskontroll asendati fikseeritud 500 ms ootelt piiratud tervisekontrolliga: elus PID ei tõenda veel, et vana testrakenduse HTTP-port on avatud. See puudutab ainult sünteetilist testadapterit; tootmise PM2-adapterit ega tervisekontrolli ei muudeta.

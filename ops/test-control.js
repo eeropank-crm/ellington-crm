@@ -17,6 +17,14 @@ function state(){
   const log=fs.openSync(file+'.log','a',0o600);
   const child=spawn(process.execPath,['server/index.js'],{cwd:release,env:process.env,detached:true,stdio:['ignore',log,log]});child.unref();fs.closeSync(log);
   fs.writeFileSync(file,JSON.stringify({pid:child.pid}),{mode:0o600});
-  await new Promise(r=>setTimeout(r,500));if(!state())throw Error('not running');
+  // A live PID is not proof that Express has bound its socket yet.
+  const port=Number(process.env.PORT||3000);if(!Number.isInteger(port)||port<1024||port>65535)throw Error('invalid test port');
+  let ready=false;
+  for(let i=0;i<100;i++){
+   if(!state())throw Error('not running');
+   try{const response=await fetch('http://127.0.0.1:'+port+'/health',{signal:AbortSignal.timeout(250)});if(response.status===200&&(await response.json()).status==='ok'){ready=true;break;}}catch{}
+   await new Promise(r=>setTimeout(r,100));
+  }
+  if(!ready)throw Error('test application did not become ready');
  }else throw Error('invalid action');
 })().catch(()=>{process.exitCode=1;});
