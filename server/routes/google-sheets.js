@@ -50,6 +50,14 @@ module.exports = (db, options = {}) => {
     action(() => service.sync({ manual: true })),
   );
   r.post(
+    "/admin/google-sheets/bulk-preview",
+    action((req) => service.bulkPreview(req.crmUser)),
+  );
+  r.post(
+    "/admin/google-sheets/bulk-bind",
+    action((req) => service.bulkBind(req.crmUser, req.body || {})),
+  );
+  r.post(
     "/admin/google-sheets/:id/create",
     action((req) =>
       service.createPending(req.crmUser, id(req), req.body || {}),

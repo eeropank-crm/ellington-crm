@@ -231,6 +231,29 @@
       }
     };
   }
+  $("bulk-preview").onclick = () =>
+    run(async () => {
+      const plan = await api("/bulk-preview", {});
+      $("bulk-result").innerHTML =
+        `<p>Seostamiseks sobib ${plan.eligible.length} rida. Käsitsi ülevaatusele jääb ${plan.manual} rida.</p><p>Olemasolevad kliendiandmed, omanikud, tegevused ja järeltegevuste arv säilivad.</p><ul>${plan.eligible.map((r) => `<li>Tabeli rida ${esc(r.row)}: ${esc(r.company)} · ${esc(r.email)} → CRM-klient #${Number(r.client_id)}, kontakt #${Number(r.contact_id)}</li>`).join("")}</ul>${plan.eligible.length ? '<button id="bulk-confirm">Kinnita eelvaate kõik seosed</button>' : ""}`;
+      if ($("bulk-confirm"))
+        $("bulk-confirm").onclick = () =>
+          run(async () => {
+            if (
+              !confirm(
+                `Seostada eelvaate ${plan.eligible.length} rida? CRM-i andmeid ei muudeta.`,
+              )
+            )
+              return;
+            const result = await api("/bulk-bind", {
+              token: plan.token,
+              confirm: true,
+            });
+            if (result.skipped) throw Error(result.reason);
+            $("bulk-result").textContent =
+              `Seostatud ${result.bound} rida. Käsitsi ülevaatusele jäi ${result.manual} rida.`;
+          });
+    });
   $("check").onclick = () =>
     run(async () => {
       const r = await api("/check", {});

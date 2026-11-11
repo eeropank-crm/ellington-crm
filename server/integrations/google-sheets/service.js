@@ -380,6 +380,143 @@ module.exports = function (
       }),
     );
   }
+  // Conservative bulk binding: identity must be unique in both datasets and
+  // every populated source field must already match. Never write business data.
+  async function bulkPlan(trx, lock = false) {
+    const records = await trx("crm_sheet_sync_records")
+      .orderBy("id")
+      .modify((q) => {
+        if (lock) q.forUpdate();
+      })
+      .select("*");
+    if (records.length > 10000) model.fail("SHEETS_SIZE");
+    const clients = await trx("crm_clients")
+      .orderBy("id")
+      .modify((q) => {
+        if (lock) q.forUpdate();
+      })
+      .select("id", "name");
+    const contacts = await trx("crm_contacts")
+      .orderBy("id")
+      .modify((q) => {
+        if (lock) q.forUpdate();
+      })
+      .select("id", "client_id", "name", "email", "phone");
+    const norm = (value) =>
+      String(value || "")
+        .trim()
+        .toLowerCase();
+    const key = (company, email) =>
+      JSON.stringify([norm(company), norm(email)]);
+    const sourceCounts = new Map(),
+      matches = new Map();
+    const clientNames = new Map(clients.map((c) => [String(c.id), c.name]));
+    const bound = new Set(
+      records.filter((r) => r.client_id).map((r) => String(r.contact_id)),
+    );
+    for (const r of records) {
+      const d = decode(r.state).latest.data,
+        k = key(d.company, d.email);
+      sourceCounts.set(k, (sourceCounts.get(k) || 0) + 1);
+    }
+    for (const c of contacts) {
+      const company = clientNames.get(String(c.client_id));
+      if (!company || !norm(c.email)) continue;
+      const k = key(company, c.email);
+      if (!matches.has(k)) matches.set(k, []);
+      matches.get(k).push(c);
+    }
+    const eligible = [];
+    let pending = 0;
+    for (const r of records) {
+      if (r.status !== "pending" || r.client_id) continue;
+      pending++;
+      const d = decode(r.state).latest.data,
+        k = key(d.company, d.email);
+      const candidates = matches.get(k) || [];
+      if (
+        !norm(d.email) ||
+        sourceCounts.get(k) !== 1 ||
+        candidates.length !== 1
+      )
+        continue;
+      const c = candidates[0];
+      if (bound.has(String(c.id))) continue;
+      if (
+        ["name", "phone"].some(
+          (f) => d[f] && String(d[f]) !== String(c[f] || ""),
+        )
+      )
+        continue;
+      eligible.push({
+        record_id: r.id,
+        version: version(r),
+        row: decode(r.state).latest.row,
+        company: d.company,
+        email: d.email,
+        client_id: c.client_id,
+        contact_id: c.id,
+        current: {
+          company: clientNames.get(String(c.client_id)),
+          name: c.name || "",
+          email: c.email || "",
+          phone: c.phone || "",
+        },
+      });
+    }
+    const token = crypto
+      .createHash("sha256")
+      .update(JSON.stringify(eligible))
+      .digest("hex");
+    return { token, eligible, pending, manual: pending - eligible.length };
+  }
+  async function bulkPreview(user) {
+    return db.transaction(async (trx) => {
+      await requireAdmin(trx, user);
+      const plan = await bulkPlan(trx);
+      return { ok: true, ...plan };
+    });
+  }
+  async function bulkBind(user, input) {
+    if (input.confirm !== true || !/^[a-f0-9]{64}$/.test(input.token || ""))
+      model.fail("SHEETS_BIND");
+    return exclusive(() =>
+      db.transaction(async (trx) => {
+        await requireAdmin(trx, user);
+        const plan = await bulkPlan(trx, true);
+        if (plan.token !== input.token || !plan.eligible.length)
+          model.fail("SHEETS_STALE");
+        for (const item of plan.eligible) {
+          const record = await trx("crm_sheet_sync_records")
+            .where({ id: item.record_id })
+            .first();
+          const state = decode(record.state);
+          state.base = {};
+          for (const field of Object.keys(model.fields)) {
+            state.base[field] = {
+              source: state.latest.data[field],
+              crm: String(item.current[field]),
+            };
+          }
+          state.conflicts = {};
+          await trx("crm_sheet_sync_records")
+            .where({ id: record.id })
+            .update({
+              client_id: item.client_id,
+              contact_id: item.contact_id,
+              status: "linked",
+              state: encoded(state),
+            });
+          await audit(trx, record.id, user, "bound", {
+            client_id: item.client_id,
+            contact_id: item.contact_id,
+            bulk: true,
+          });
+        }
+        return { ok: true, bound: plan.eligible.length, manual: plan.manual };
+      }),
+    );
+  }
   async function createPending(user, id, input) {
     return exclusive(() =>
       db.transaction(async (trx) => {
@@ -529,5 +666,15 @@ module.exports = function (
       page,
     };
   }
-  return { sync, check, bind, resolve, status, search, createPending };
+  return {
+    sync,
+    check,
+    bind,
+    resolve,
+    status,
+    search,
+    createPending,
+    bulkPreview,
+    bulkBind,
+  };
 };
