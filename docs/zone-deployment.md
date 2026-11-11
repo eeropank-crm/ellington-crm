@@ -271,3 +271,28 @@ autentimiskaitsed, ümbersuunamiste ja väliste sihtkohtade tõkestamine ning
 proxy-keskkonnamuutujatest sõltumatus. Kogu varasemat 39 testi komplekti ei
 korratud. Zone.ee serverisse ei ühendutud ega seal faile, protsesse või andmeid
 muudetud.
+
+## PM2 versioonihoiatus JSON-väljundi ees
+
+PM2 võib lisada käsu `pm2 jlist` standardväljundisse enne JSON-i teate
+`>>>> In-memory PM2 is out-of-date, do:` koos daemon'i ja kohaliku PM2 versioonidega.
+Varasem adapter andis selle tõttu JSON-i parsimise vea. Paigalduskäsuploki
+algse `status` kontrolli juures tekkinud viga eelneb eelkontrollile, rakenduse
+peatamisele, varundamisele ja migratsioonile: ära käivita selle parandamiseks
+`pm2 update`, mis võib protsesse taaskäivitada.
+
+Adapter lubab nüüd enne JSON-massiivi ainult selle täieliku tuntud teate;
+versiooninumbrid, reavahetused ja teate ANSI-värvid võivad erineda. See ei otsi
+suvalisest vigasest tekstist JSON-fragmenti. Ootamatu eessõna, puudulik JSON,
+lisatekst JSON-i järel või vigane protsessikirje peatab töö üldise veateatega,
+mis ei väljasta PM2 keskkonnamuutujaid ega muid privaatseid väärtusi.
+
+Säilivad täpse protsessinime, ühe vaste, käivitusfaili tegeliku tee ja protsessi
+oleku kontrollid. `status` loeb ainult nimekirja ega käivita PM2 uuendamist.
+PM2 globaalseid seadistusi, rakenduse koodi, andmebaasi ega `.env` faili selle
+parsimisparanduse jaoks ei muudeta. Parandus tuleb võtta uuest kontrollitud
+GitHubi väljalaskest, mitte muuta pooleli oleva paigaldusallika faile käsitsi.
+
+Sihitud kontrollid: 10 sünteetilise PM2-käsu/parsimise testi ja 8 olemasolevat
+tervisekontrolli testi läbitud. Testid ei kasuta päris PM2 daemon'it ega saada
+kirju; kõik protsessitoimingud salvestab kohalik testasendus.
