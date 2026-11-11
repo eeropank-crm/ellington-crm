@@ -296,3 +296,10 @@ GitHubi väljalaskest, mitte muuta pooleli oleva paigaldusallika faile käsitsi.
 Sihitud kontrollid: 10 sünteetilise PM2-käsu/parsimise testi ja 8 olemasolevat
 tervisekontrolli testi läbitud. Testid ei kasuta päris PM2 daemon'it ega saada
 kirju; kõik protsessitoimingud salvestab kohalik testasendus.
+
+Lisaks läbisid kõik 9 isoleeritud MariaDB 11.4.13 paigalduse ja taastamise
+regressiooni: täielik varundamine, kontrollitud migratsioonid ja andmesisu
+säilimine, varundusvea korral katkestamine, taastamine eraldi tühja andmebaasi
+ning rakenduse käivitusvea käsitlemine. Selle paranduse asjakohased kontrollid:
+27 läbitud, 0 ebaõnnestunud, 0 vahele jäetud. Varasemat kogu CRM-i testikomplekti
+ei korratud. Tootmiskeskkonnaga ühendust ei loodud.
