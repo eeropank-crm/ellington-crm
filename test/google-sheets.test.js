@@ -909,3 +909,135 @@ test("missing, inactive or colliding owner mappings never fall back to Eero or c
     .where({ id: Number(original) })
     .update({ is_active: 1 });
 });
+
+async function bulkFixture() {
+  const row = makeRow("Bulk synthetic " + crypto.randomUUID());
+  const [client] = await db("crm_clients").insert({
+    name: row[0],
+    owner_user_id: user.id,
+    followup_count: 7,
+  });
+  const [contact] = await db("crm_contacts").insert({
+    client_id: client,
+    name: row[1],
+    email: row[2],
+    phone: row[3],
+  });
+  rows = [row];
+  assert.equal((await sync()).ok, true);
+  assert.equal((await record(row[8])).status, "pending");
+  return { row, client, contact };
+}
+
+test("bulk preview is read-only and confirmed binding preserves all business records and subsequent sync", async () => {
+  const f = await bulkFixture();
+  const clientBefore = await db("crm_clients").where({ id: f.client }).first();
+  const contactBefore = await db("crm_contacts")
+    .where({ id: f.contact })
+    .first();
+  const auditBefore = Number(
+    (await db("crm_sheet_sync_audit").count("* as n").first()).n,
+  );
+  const p = await service.bulkPreview(user);
+  assert(
+    p.eligible.some(
+      (r) => r.client_id === f.client && r.contact_id === f.contact,
+    ),
+  );
+  assert.equal((await record(f.row[8])).status, "pending");
+  assert.equal(
+    Number((await db("crm_sheet_sync_audit").count("* as n").first()).n),
+    auditBefore,
+  );
+  const result = await service.bulkBind(user, {
+    token: p.token,
+    confirm: true,
+  });
+  assert.equal(result.ok, true);
+  assert(result.bound >= 1);
+  assert.equal((await record(f.row[8])).status, "linked");
+  assert.deepEqual(
+    await db("crm_clients").where({ id: f.client }).first(),
+    clientBefore,
+  );
+  assert.deepEqual(
+    await db("crm_contacts").where({ id: f.contact }).first(),
+    contactBefore,
+  );
+  assert.equal((await sync()).ok, true);
+  assert.equal((await record(f.row[8])).status, "linked");
+  await assert.rejects(
+    service.bulkBind(user, { token: p.token, confirm: true }),
+    { code: "SHEETS_STALE" },
+  );
+});
+
+test("bulk refuses ambiguous contacts, duplicate source identities and differing populated contact fields", async () => {
+  const f = await bulkFixture();
+  const [duplicate] = await db("crm_contacts").insert({
+    client_id: f.client,
+    name: f.row[1],
+    email: f.row[2],
+    phone: f.row[3],
+  });
+  assert(
+    !(await service.bulkPreview(user)).eligible.some(
+      (r) => r.client_id === f.client,
+    ),
+  );
+  await db("crm_contacts").where({ id: duplicate }).delete();
+  await db("crm_contacts")
+    .where({ id: f.contact })
+    .update({ phone: "different" });
+  assert(
+    !(await service.bulkPreview(user)).eligible.some(
+      (r) => r.client_id === f.client,
+    ),
+  );
+  await db("crm_contacts").where({ id: f.contact }).update({ phone: f.row[3] });
+  rows.push([...f.row]);
+  rows[1][8] = crypto.randomUUID();
+  assert.equal((await sync()).ok, true);
+  assert(
+    !(await service.bulkPreview(user)).eligible.some(
+      (r) => r.client_id === f.client,
+    ),
+  );
+});
+
+test("bulk confirmation revalidates source and CRM and rolls back stale preview", async () => {
+  const f = await bulkFixture();
+  let p = await service.bulkPreview(user);
+  await db("crm_contacts")
+    .where({ id: f.contact })
+    .update({ email: "changed-" + crypto.randomUUID() + "@example.invalid" });
+  await assert.rejects(
+    service.bulkBind(user, { token: p.token, confirm: true }),
+    { code: "SHEETS_STALE" },
+  );
+  assert.equal((await record(f.row[8])).client_id, null);
+  await db("crm_contacts").where({ id: f.contact }).update({ email: f.row[2] });
+  p = await service.bulkPreview(user);
+  rows[0][3] = "changed-source";
+  await sync();
+  await assert.rejects(
+    service.bulkBind(user, { token: p.token, confirm: true }),
+    { code: "SHEETS_STALE" },
+  );
+  assert.equal((await record(f.row[8])).client_id, null);
+});
+
+test("bulk API requires administrator mode, explicit confirmation and valid preview token", async () => {
+  await bulkFixture();
+  actor = { ...user, role: "sales" };
+  await api("/bulk-preview", {}, 403);
+  await api("/bulk-bind", { confirm: true, token: "a".repeat(64) }, 403);
+  actor = user;
+  const p = await api("/bulk-preview", {});
+  await api("/bulk-bind", { token: p.token }, 409);
+  await api("/bulk-bind", { confirm: true, token: "invalid" }, 409);
+  assert.equal(
+    (await api("/bulk-bind", { confirm: true, token: p.token })).ok,
+    true,
+  );
+});

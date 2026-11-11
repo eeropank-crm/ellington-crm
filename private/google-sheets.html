@@ -58,6 +58,17 @@
   <button id="refresh">Värskenda</button
   ><button id="check">Kontrolli ühendust</button
   ><button id="sync">Sünkrooni kohe</button>
+  <section>
+    <h2>Üheste vastete hulgi-seostamine</h2>
+    <p>
+      Seotakse ainult üheselt kattuva ettevõtte nime ja kontakti e-postiga read,
+      mille muud täidetud kontaktandmed juba kattuvad. CRM-i andmeid ei
+      kirjutata üle ega looda uusi kliente. Ebaselged read jäävad käsitsi
+      ülevaatusele.
+    </p>
+    <button id="bulk-preview">Koosta seostamise eelvaade</button>
+    <div id="bulk-result" role="status"></div>
+  </section>
   <main id="content"></main>
   <script src="/google-sheets-admin.js" defer></script>
 </html>
