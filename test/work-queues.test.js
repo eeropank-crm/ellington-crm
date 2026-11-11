@@ -170,12 +170,12 @@ test('corrupted saved state fails closed and does not manufacture replacement se
 });
 test('new migration is restartable and strict preflight accepts only its known missing table',async()=>{
  const initial=await inspect(db);assert.equal(validate(initial,true).ok,true);assert.ok(initial.applied.includes('005_daily_work_queues.js'));
- const prior=structuredClone(initial);prior.tables=prior.tables.filter(t=>t.TABLE_NAME!=='crm_work_queue_days');prior.columns=prior.columns.filter(c=>c.TABLE_NAME!=='crm_work_queue_days');prior.indexes=prior.indexes.filter(i=>i.TABLE_NAME!=='crm_work_queue_days');prior.applied=prior.applied.filter(x=>!['005_daily_work_queues.js','006_user_mail_signatures.js'].includes(x));
- assert.equal(validate(prior).ok,true);assert.deepEqual(validate(prior).pending,['005_daily_work_queues.js','006_user_mail_signatures.js']);assert.equal(validate(prior,true).ok,false);
+ const prior=structuredClone(initial);prior.tables=prior.tables.filter(t=>t.TABLE_NAME!=='crm_work_queue_days');prior.columns=prior.columns.filter(c=>c.TABLE_NAME!=='crm_work_queue_days');prior.indexes=prior.indexes.filter(i=>i.TABLE_NAME!=='crm_work_queue_days');prior.applied=prior.applied.filter(x=>!['005_daily_work_queues.js','006_user_mail_signatures.js','007_google_sheet_sync.js'].includes(x));
+ assert.equal(validate(prior).ok,true);assert.deepEqual(validate(prior).pending,['005_daily_work_queues.js','006_user_mail_signatures.js','007_google_sheet_sync.js']);assert.equal(validate(prior,true).ok,false);
  const partial=structuredClone(initial);partial.applied=prior.applied;partial.columns=partial.columns.filter(c=>!(c.TABLE_NAME==='crm_work_queue_days'&&c.COLUMN_NAME==='state'));assert.equal(validate(partial).ok,false);
  const before=await snapshot(),plans=await db('crm_work_queue_days').select('*');await require('../database/migrations/005_daily_work_queues').up(db);assert.deepEqual(await snapshot(),before);assert.deepEqual(await db('crm_work_queue_days').select('*'),plans);
  await assert.rejects(require('../database/migrations/005_daily_work_queues').down(db),/Forward-only/);
- assert.equal(migrations.length,6);
+ assert.equal(migrations.length,7);
 });
 test('a concurrent manual planner cannot produce a second active task for a returning client',async()=>{
  const suffix=crypto.randomBytes(6).toString('hex');

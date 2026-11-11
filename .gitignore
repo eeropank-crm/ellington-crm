@@ -22,3 +22,6 @@ private/uploads/
 .DS_Store
 
 work/
+
+*service-account*.json
+*service_account*.json

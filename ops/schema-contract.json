@@ -160,7 +160,27 @@
     {"TABLE_NAME":"crm_user_mail_settings","COLUMN_NAME":"signature","COLUMN_TYPE":"text","IS_NULLABLE":"NO","COLUMN_DEFAULT":null,"EXTRA":"","CHARACTER_SET_NAME":"utf8mb4"},
     {"TABLE_NAME":"crm_user_mail_settings","COLUMN_NAME":"version","COLUMN_TYPE":"int(10) unsigned","IS_NULLABLE":"NO","COLUMN_DEFAULT":"1","EXTRA":"","CHARACTER_SET_NAME":null},
     {"TABLE_NAME":"crm_user_mail_settings","COLUMN_NAME":"created_at","COLUMN_TYPE":"timestamp","IS_NULLABLE":"NO","COLUMN_DEFAULT":"current_timestamp()","EXTRA":"","CHARACTER_SET_NAME":null},
-    {"TABLE_NAME":"crm_user_mail_settings","COLUMN_NAME":"updated_at","COLUMN_TYPE":"timestamp","IS_NULLABLE":"NO","COLUMN_DEFAULT":"current_timestamp()","EXTRA":"","CHARACTER_SET_NAME":null}
+    {"TABLE_NAME":"crm_user_mail_settings","COLUMN_NAME":"updated_at","COLUMN_TYPE":"timestamp","IS_NULLABLE":"NO","COLUMN_DEFAULT":"current_timestamp()","EXTRA":"","CHARACTER_SET_NAME":null},
+    {"TABLE_NAME":"crm_sheet_sync_audit","COLUMN_NAME":"id","COLUMN_TYPE":"bigint(20) unsigned","IS_NULLABLE":"NO","COLUMN_DEFAULT":null,"EXTRA":"auto_increment","CHARACTER_SET_NAME":null},
+    {"TABLE_NAME":"crm_sheet_sync_audit","COLUMN_NAME":"record_id","COLUMN_TYPE":"bigint(20) unsigned","IS_NULLABLE":"NO","COLUMN_DEFAULT":null,"EXTRA":"","CHARACTER_SET_NAME":null},
+    {"TABLE_NAME":"crm_sheet_sync_audit","COLUMN_NAME":"user_id","COLUMN_TYPE":"bigint(20) unsigned","IS_NULLABLE":"YES","COLUMN_DEFAULT":"NULL","EXTRA":"","CHARACTER_SET_NAME":null},
+    {"TABLE_NAME":"crm_sheet_sync_audit","COLUMN_NAME":"action","COLUMN_TYPE":"varchar(30)","IS_NULLABLE":"NO","COLUMN_DEFAULT":null,"EXTRA":"","CHARACTER_SET_NAME":"utf8mb4"},
+    {"TABLE_NAME":"crm_sheet_sync_audit","COLUMN_NAME":"details","COLUMN_TYPE":"text","IS_NULLABLE":"NO","COLUMN_DEFAULT":null,"EXTRA":"","CHARACTER_SET_NAME":"utf8mb4"},
+    {"TABLE_NAME":"crm_sheet_sync_audit","COLUMN_NAME":"created_at","COLUMN_TYPE":"timestamp","IS_NULLABLE":"NO","COLUMN_DEFAULT":"current_timestamp()","EXTRA":"","CHARACTER_SET_NAME":null},
+    {"TABLE_NAME":"crm_sheet_sync_records","COLUMN_NAME":"id","COLUMN_TYPE":"bigint(20) unsigned","IS_NULLABLE":"NO","COLUMN_DEFAULT":null,"EXTRA":"auto_increment","CHARACTER_SET_NAME":null},
+    {"TABLE_NAME":"crm_sheet_sync_records","COLUMN_NAME":"source_id","COLUMN_TYPE":"varchar(64)","IS_NULLABLE":"NO","COLUMN_DEFAULT":null,"EXTRA":"","CHARACTER_SET_NAME":"utf8mb4"},
+    {"TABLE_NAME":"crm_sheet_sync_records","COLUMN_NAME":"client_id","COLUMN_TYPE":"bigint(20) unsigned","IS_NULLABLE":"YES","COLUMN_DEFAULT":"NULL","EXTRA":"","CHARACTER_SET_NAME":null},
+    {"TABLE_NAME":"crm_sheet_sync_records","COLUMN_NAME":"contact_id","COLUMN_TYPE":"bigint(20) unsigned","IS_NULLABLE":"YES","COLUMN_DEFAULT":"NULL","EXTRA":"","CHARACTER_SET_NAME":null},
+    {"TABLE_NAME":"crm_sheet_sync_records","COLUMN_NAME":"status","COLUMN_TYPE":"varchar(30)","IS_NULLABLE":"NO","COLUMN_DEFAULT":null,"EXTRA":"","CHARACTER_SET_NAME":"utf8mb4"},
+    {"TABLE_NAME":"crm_sheet_sync_records","COLUMN_NAME":"state","COLUMN_TYPE":"text","IS_NULLABLE":"NO","COLUMN_DEFAULT":null,"EXTRA":"","CHARACTER_SET_NAME":"utf8mb4"},
+    {"TABLE_NAME":"crm_sheet_sync_records","COLUMN_NAME":"created_at","COLUMN_TYPE":"timestamp","IS_NULLABLE":"NO","COLUMN_DEFAULT":"current_timestamp()","EXTRA":"","CHARACTER_SET_NAME":null},
+    {"TABLE_NAME":"crm_sheet_sync_records","COLUMN_NAME":"updated_at","COLUMN_TYPE":"timestamp","IS_NULLABLE":"NO","COLUMN_DEFAULT":"current_timestamp()","EXTRA":"","CHARACTER_SET_NAME":null},
+    {"TABLE_NAME":"crm_sheet_sync_runs","COLUMN_NAME":"id","COLUMN_TYPE":"bigint(20) unsigned","IS_NULLABLE":"NO","COLUMN_DEFAULT":null,"EXTRA":"auto_increment","CHARACTER_SET_NAME":null},
+    {"TABLE_NAME":"crm_sheet_sync_runs","COLUMN_NAME":"run_key","COLUMN_TYPE":"varchar(80)","IS_NULLABLE":"NO","COLUMN_DEFAULT":null,"EXTRA":"","CHARACTER_SET_NAME":"utf8mb4"},
+    {"TABLE_NAME":"crm_sheet_sync_runs","COLUMN_NAME":"status","COLUMN_TYPE":"varchar(30)","IS_NULLABLE":"NO","COLUMN_DEFAULT":null,"EXTRA":"","CHARACTER_SET_NAME":"utf8mb4"},
+    {"TABLE_NAME":"crm_sheet_sync_runs","COLUMN_NAME":"summary","COLUMN_TYPE":"text","IS_NULLABLE":"NO","COLUMN_DEFAULT":null,"EXTRA":"","CHARACTER_SET_NAME":"utf8mb4"},
+    {"TABLE_NAME":"crm_sheet_sync_runs","COLUMN_NAME":"created_at","COLUMN_TYPE":"timestamp","IS_NULLABLE":"NO","COLUMN_DEFAULT":"current_timestamp()","EXTRA":"","CHARACTER_SET_NAME":null},
+    {"TABLE_NAME":"crm_sheet_sync_runs","COLUMN_NAME":"completed_at","COLUMN_TYPE":"timestamp","IS_NULLABLE":"YES","COLUMN_DEFAULT":"NULL","EXTRA":"","CHARACTER_SET_NAME":null}
   ],
   "indexes": [
     {"TABLE_NAME":"crm_activities","INDEX_NAME":"PRIMARY","NON_UNIQUE":0,"SEQ_IN_INDEX":1,"COLUMN_NAME":"id","SUB_PART":null},
@@ -208,6 +228,12 @@
     {"TABLE_NAME":"crm_work_queue_days","INDEX_NAME":"crm_work_queue_days_owner_user_id_work_date_unique","NON_UNIQUE":0,"SEQ_IN_INDEX":1,"COLUMN_NAME":"owner_user_id","SUB_PART":null},
     {"TABLE_NAME":"crm_work_queue_days","INDEX_NAME":"crm_work_queue_days_owner_user_id_work_date_unique","NON_UNIQUE":0,"SEQ_IN_INDEX":2,"COLUMN_NAME":"work_date","SUB_PART":null},
     {"TABLE_NAME":"crm_work_queue_days","INDEX_NAME":"PRIMARY","NON_UNIQUE":0,"SEQ_IN_INDEX":1,"COLUMN_NAME":"id","SUB_PART":null},
-    {"TABLE_NAME":"crm_user_mail_settings","INDEX_NAME":"PRIMARY","NON_UNIQUE":0,"SEQ_IN_INDEX":1,"COLUMN_NAME":"user_id","SUB_PART":null}
+    {"TABLE_NAME":"crm_user_mail_settings","INDEX_NAME":"PRIMARY","NON_UNIQUE":0,"SEQ_IN_INDEX":1,"COLUMN_NAME":"user_id","SUB_PART":null},
+    {"TABLE_NAME":"crm_sheet_sync_audit","INDEX_NAME":"crm_sheet_sync_audit_record_id_index","NON_UNIQUE":1,"SEQ_IN_INDEX":1,"COLUMN_NAME":"record_id","SUB_PART":null},
+    {"TABLE_NAME":"crm_sheet_sync_audit","INDEX_NAME":"PRIMARY","NON_UNIQUE":0,"SEQ_IN_INDEX":1,"COLUMN_NAME":"id","SUB_PART":null},
+    {"TABLE_NAME":"crm_sheet_sync_records","INDEX_NAME":"crm_sheet_sync_records_source_id_unique","NON_UNIQUE":0,"SEQ_IN_INDEX":1,"COLUMN_NAME":"source_id","SUB_PART":null},
+    {"TABLE_NAME":"crm_sheet_sync_records","INDEX_NAME":"PRIMARY","NON_UNIQUE":0,"SEQ_IN_INDEX":1,"COLUMN_NAME":"id","SUB_PART":null},
+    {"TABLE_NAME":"crm_sheet_sync_runs","INDEX_NAME":"crm_sheet_sync_runs_run_key_unique","NON_UNIQUE":0,"SEQ_IN_INDEX":1,"COLUMN_NAME":"run_key","SUB_PART":null},
+    {"TABLE_NAME":"crm_sheet_sync_runs","INDEX_NAME":"PRIMARY","NON_UNIQUE":0,"SEQ_IN_INDEX":1,"COLUMN_NAME":"id","SUB_PART":null}
   ]
 }

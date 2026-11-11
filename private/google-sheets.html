@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="et">
+  <meta charset="utf-8" /><meta
+    name="viewport"
+    content="width=device-width,initial-scale=1"
+  /><title>Google’i tabeli sünk · Ellington CRM</title
+  ><style>
+    body {
+      font: 16px system-ui;
+      background: #f5f7fb;
+      color: #20304a;
+      margin: 24px auto;
+      padding: 0 16px;
+      max-width: 1000px;
+    }
+    section {
+      background: white;
+      border: 1px solid #d7dfeb;
+      border-radius: 12px;
+      padding: 20px;
+      margin: 16px 0;
+    }
+    button,
+    input,
+    select {
+      font: inherit;
+      padding: 9px;
+      margin: 4px;
+      max-width: 95%;
+    }
+    pre {
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+    }
+    button {
+      cursor: pointer;
+    }
+    button:disabled {
+      cursor: wait;
+    }
+    label {
+      display: block;
+    }
+    small {
+      display: block;
+      color: #526079;
+    }
+    .error {
+      color: #a12424;
+    }</style
+  ><a href="/prototype-preview">← CRM-i tagasi</a>
+  <h1>Google’i tabeli sünkroonimine</h1>
+  <p>
+    Kontaktandmed tulevad tabelist. Tegevused, kirjad, omanikud ja
+    järeltegevuste arv jäävad CRM-i hallata.
+  </p>
+  <p id="notice" role="status"></p>
+  <button id="refresh">Värskenda</button
+  ><button id="check">Kontrolli ühendust</button
+  ><button id="sync">Sünkrooni kohe</button>
+  <main id="content"></main>
+  <script src="/google-sheets-admin.js" defer></script>
+</html>
