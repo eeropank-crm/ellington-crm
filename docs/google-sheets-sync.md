@@ -27,15 +27,17 @@ flowchart LR
 | `inimese nimi`, `meiliaadress`, `telefon` | Seotud kontaktisiku andmed; konfliktireegliga |
 | `allikas`, `Potensiaal 1-5`, `Huvi tase 1-5`, `Tõenäeosus %` | Säilitatakse integratsiooni metaandmetena, nähtavad ülevaatust vajava rea juures; need ei muuda müüginumbreid ega tegevusi |
 | `staatus` | CRM-i staatust üle ei kirjutata. Täiesti uue ja mittetühja tabelistaatusega rea automaatne aktiveerimine blokeeritakse ning vajab administraatori otsust |
-| Kaks `Faas` veergu, kuupäevad, kirjad, vastused, kommentaarid, followup'ide arv | Ei impordita CRM-i töövoo või ajaloo asemele |
+| Faasiandmed (välja arvatud allkirjeldatud vastutajatähis), kuupäevad, kirjad, vastused, kommentaarid, followup'ide arv | Ei impordita CRM-i töövoo või ajaloo asemele |
 
-Server küsib päised ning seejärel ainult lubatud veerud. Firma, kontakti, e-posti, telefoni, CRM ID ja staatuse päised peavad olema ühesed; sama nimega Faas veerud jäävad kõrvale. Lugemise järel kontrollitakse, et päised pole vahepeal muutunud. Vanade kirjade ja tegevuste sisu ei loeta Google'ist impordi tarbeks.
+Vastutaja veerg võib olla üheselt nimetatud **Vastutaja**. Praeguse lähtefaili puhul tuntakse ära ka olemasolev täpne paigutus: B-veeru päis on Faas ja C-veeru päis Faas; vastutajamärgid asuvad C-veerus. Kui päised seda lepingut enam ei kinnita, ei arvata veergu väärtuste järgi. Väljaspool seda pärandpaigutust tuleb kasutada üheselt nimetatud Vastutaja veergu.
+
+Server küsib päised ning seejärel ainult lubatud veerud. Firma, kontakti, e-posti, telefoni, CRM ID ja staatuse päised peavad olema ühesed; tegevusfaasi veerg jääb kõrvale, pärandpaigutuse C-veergu loetakse ainult vastutaja tähisena. Lugemise järel kontrollitakse, et päised pole vahepeal muutunud. Vanade kirjade ja tegevuste sisu ei loeta Google'ist impordi tarbeks.
 
 ## Seostamine ja konfliktid
 
 Iga Google'i rida seotakse püsiva UUID kaudu ühe CRM-kliendi ja vajadusel ühe kontaktiga. Mitu rida võivad administraatori kinnitusega kuuluda samale kliendile. Nimi ja e-post on ainult võimaliku duplikaadi leidmise vihjed, mitte automaatse seostamise võti.
 
-Esimene mittetühi tabeliseis läheb tervikuna administraatori ülevaatusele ka siis, kui nime või e-posti vastet ei leita: nii ei dubleerita enne ID-de loomist muudetud nime ja e-postiga vanu kliente. Edaspidi täiesti uus, kehtiva ID ja tühja tabelistaatusega rida lisatakse `Lead` tüüpi kliendina ainult siis, kui võimalikke olemasolevaid vasteid ei leita. Vastutaja tuleb serveri selgesõnalisest konfiguratsioonist ja peab olema aktiivne kasutaja. Kliendi followup'ide arv algab nullist. Import ei loo tegevust ega saada e-kirja.
+Esimene mittetühi tabeliseis läheb tervikuna administraatori ülevaatusele ka siis, kui nime või e-posti vastet ei leita: nii ei dubleerita enne ID-de loomist muudetud nime ja e-postiga vanu kliente. Edaspidi täiesti uus, kehtiva ID ja tühja tabelistaatusega rida lisatakse `Lead` tüüpi kliendina ainult siis, kui võimalikke olemasolevaid vasteid ei leita. Vastutaja valitakse tabeli tähise järgi: **P → Palme, I → Indrek, E või tühi → Eero**. Kasutaja ID-d tulevad serveri selgesõnalisest konfiguratsioonist ning määratav kasutaja peab olema aktiivne. Puuduv, vigane või peatatud vastutaja ei lange vaikimisi Eerole; käivitus peatub ilma poolikute kliendimuudatusteta. Kliendi followup'ide arv algab nullist. Import ei loo tegevust ega saada e-kirja.
 
 Olemasolevate võimalike vastetega rida jääb seostamise ootele. Administraator valib CRM-kliendi ja kontaktisiku; otsing on saadaval. Esialgseid erinevaid mittetühje CRM-väärtusi ei kirjutata seostamisel automaatselt üle. Tühja CRM-välja võib täiendada.
 
@@ -95,10 +97,12 @@ CRM_SHEETS_ENABLED=1
 CRM_SHEETS_SPREADSHEET_ID=17VZwhiVkLRZfyCfnnCjc80kDkDHWjg5WwOWVi9RpDPE
 CRM_SHEETS_TAB=Müük
 CRM_SHEETS_CREDENTIALS_FILE=/absoluutne/privaatne/tee/teenusekonto.json
-CRM_SHEETS_DEFAULT_OWNER_ID=valitud_aktiivse_kasutaja_numbriline_ID
+CRM_SHEETS_DEFAULT_OWNER_ID=1
+CRM_SHEETS_OWNER_P_ID=3
+CRM_SHEETS_OWNER_I_ID=2
 ```
 
-Võtmefaili tee ja vaikimisi vastutaja tuleb tegelikult seadistada; näidiseid ei tohi muutmata käivitada. Konfiguratsioon laaditakse veebiprotsessi käivitamisel. Hilisem `.env` muutmine nõuab kontrollitud konfiguratsiooni taaslaadimist; ainult faili muutmine ei muuda töötava PM2 protsessi keskkonda.
+Kinnitatud senine kontode vastavus on Eero=1, Palme=3 ja Indrek=2. Enne aktiveerimist kontrolli administraatori sünkroonimisvaatest, et P/I/E näitavad õigeid aktiivseid kontosid. Võtmefaili tee tuleb tegelikult seadistada; näidiseid ei tohi muutmata käivitada. Konfiguratsioon laaditakse veebiprotsessi käivitamisel. Hilisem `.env` muutmine nõuab kontrollitud konfiguratsiooni taaslaadimist; ainult faili muutmine ei muuda töötava PM2 protsessi keskkonda.
 
 ### 4. Kontroll ja esmane import
 
@@ -136,3 +140,7 @@ Päris Google'i failist kontrolliti arenduse käigus ainult päiseid ja staatuse
 Samaaegsete päevaplaanide testis ilmnenud InnoDB deadlock’i korral korratakse kõrvalmõjudeta tehingut nüüd kuni viie katsena lühikese hajutatud viitega. Tühistatud tehing ei saada kirja ega jäta poolikut päevaplaani; muud vead ja korduspiiri ületamine tagastatakse endiselt veana.
 
 Arenduse kontrollitulemused: 135 rakenduse regressioonitesti läbitud, sealhulgas 22 Google Sheetsi mooduli testi; 0 ebaõnnestunud ja 0 vahele jäetud. Päiselepingut kontrolliti täiendavalt 22 sihitud testiga. Chromiumis läbisid ka esimese tabeliseisu kinnitamine ja hiljem lisatud rea automaatne import, ajaloolise staatuse käsitsi kinnitamine, mõlemad konfliktiotsused ja õiguste kontroll; 0 JavaScripti viga. Lisaks läbisid kõik 43 paigalduse, migratsiooni, andmesisu säilimise, taastamise, skeemiühilduvuse, tervisekontrolli, PM2 ja SQL-režiimi regressiooni. Kokku kõik 178 automaattesti läbitud: 0 ebaõnnestunud ja 0 vahele jäetud. Testandmebaas on isoleeritud MariaDB 11.4.13 sünteetiliste andmetega.
+
+Vastutajatähise täpsustus: reegel rakendub nii automaatselt kui administraatori kinnitusega loodud täiesti uuele leadile. Olemasoleva kliendi sidumine ning hilisem P/I/E või tühja tähise muutmine ei muuda CRM-i vastutajat. Ümberjagamine käib jätkuvalt portfelli üleandmise töövoo kaudu. Administraatori vaade näitab nii seadistatud P/I/E kontosid kui tabelirea tähist. Tundmatu tähis kliendireal annab vea koos reanumbriga; tühja kliendinimega selgitusridu ei impordita.
+
+Vastutajatähiste paranduse kontroll: kõik 53 sihitud Google Sheetsi ning tööjärjekordade regressioonitesti läbitud (25 sünkroonimise testi), 0 ebaõnnestunud ja 0 vahele jäetud. Chromiumis kontrolliti P/I suunamist, olemasoleva vastutaja ja followupide arvu säilimist ning haldus- ja mobiilivaadet; 0 JavaScripti viga ja 0 päris e-kirja. Kasutati ainult kohalikku sünteetilist andmebaasi ja Google API testiasendust. See muudatus ei lisa ega muuda migratsioone.

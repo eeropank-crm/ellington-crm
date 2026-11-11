@@ -19,11 +19,20 @@ function columns(values) {
   if (!Array.isArray(values)) fail("SHEETS_HEADERS");
   const headers = values.map((v) => String(v).trim().toLowerCase());
   const indexes = {};
-  for (const [key, [name]] of Object.entries({ ...fields, id: ["crm id"], status: ["staatus"] })) {
+  for (const [key, [name]] of Object.entries({
+    ...fields,
+    id: ["crm id"],
+    status: ["staatus"],
+  })) {
     const matches = headers.flatMap((h, i) => (h === name ? [i] : []));
     if (matches.length !== 1) fail("SHEETS_HEADERS");
     indexes[key] = matches[0];
   }
+  const owners = headers.flatMap((h, i) => (h === "vastutaja" ? [i] : []));
+  if (owners.length === 1) indexes.owner = owners[0];
+  else if (!owners.length && headers[1] === "faas" && headers[2] === "faas")
+    indexes.owner = 2;
+  else fail("SHEETS_HEADERS");
   return { headers, indexes };
 }
 function parse(values) {
@@ -78,7 +87,12 @@ function parse(values) {
         statusColumn < 0 ? "" : String(raw[statusColumn] ?? "").trim();
     if (lifecycleHint.length > 1000 || /\u0000/.test(lifecycleHint))
       fail("SHEETS_VALUES");
-    rows.push({ id, row: i + 1, data, metadata, lifecycleHint });
+    const ownerMarker = String(raw[indexes.owner] ?? "")
+      .trim()
+      .toUpperCase();
+    if (!["", "E", "P", "I"].includes(ownerMarker))
+      fail("SHEETS_OWNER_MARKER", { row: i + 1, field: "owner" });
+    rows.push({ id, row: i + 1, data, metadata, lifecycleHint, ownerMarker });
   }
   return rows;
 }
@@ -116,9 +130,35 @@ function diagnostic(error) {
   if (
     error instanceof SyncError &&
     (Object.hasOwn(fields, error.details?.field || "") ||
-      error.details?.field === "id")
+      ["id", "owner"].includes(error.details?.field))
   )
     result.field = error.details.field;
   return result;
 }
-module.exports = { diagnostic, SyncError, fail, parse, slot, fields, columns };
+function ownerId(config, marker = "") {
+  if (!["", "E", "P", "I"].includes(marker)) fail("SHEETS_OWNER_MARKER");
+  const id =
+    marker === "P"
+      ? config.ownerP
+      : marker === "I"
+        ? config.ownerI
+        : config.owner;
+  if (
+    !Number.isSafeInteger(id) ||
+    id < 1 ||
+    ((marker === "P" || marker === "I") &&
+      (id === config.owner || config.ownerP === config.ownerI))
+  )
+    fail("SHEETS_OWNER");
+  return id;
+}
+module.exports = {
+  ownerId,
+  diagnostic,
+  SyncError,
+  fail,
+  parse,
+  slot,
+  fields,
+  columns,
+};

@@ -199,10 +199,30 @@ module.exports = function (
     await createLead(trx, record, state, c);
     summary.created++;
   }
+  async function lockOwners(trx, c) {
+    const ids = [
+      ...new Set(
+        [c.owner, c.ownerP, c.ownerI].filter(
+          (id) => Number.isSafeInteger(id) && id > 0,
+        ),
+      ),
+    ].sort((a, b) => a - b);
+    const owners = await trx("users")
+      .whereIn("id", ids)
+      .where({ is_active: 1 })
+      .orderBy("id")
+      .forUpdate()
+      .select("id");
+    if (!owners.some((u) => Number(u.id) === c.owner))
+      model.fail("SHEETS_OWNER");
+    return new Set(owners.map((u) => Number(u.id)));
+  }
   async function createLead(trx, record, state, c, user = null) {
+    const owner = model.ownerId(c, state.latest.ownerMarker);
+    if (!c.activeOwners?.has(owner)) model.fail("SHEETS_OWNER");
     const [client] = await trx("crm_clients").insert({
       name: state.latest.data.company,
-      owner_user_id: c.owner,
+      owner_user_id: owner,
       google_id: record.source_id,
       client_type: "Lead",
       followup_count: 0,
@@ -248,6 +268,11 @@ module.exports = function (
       .first("id");
     if (!owner) model.fail("SHEETS_OWNER");
     const rows = model.parse(await read(c));
+    for (const marker of new Set(rows.map((r) => r.ownerMarker))) {
+      const id = model.ownerId(c, marker);
+      if (!(await db("users").where({ id, is_active: 1 }).first("id")))
+        model.fail("SHEETS_OWNER");
+    }
     return { ok: true, read: rows.length };
   }
   async function sync({ manual = false } = {}) {
@@ -280,15 +305,16 @@ module.exports = function (
           conflicts: 0,
         };
         await db.transaction(async (trx) => {
-          const owner = await trx("users")
-            .where({ id: c.owner, is_active: 1 })
-            .forUpdate()
-            .first("id");
-          if (!owner) model.fail("SHEETS_OWNER");
+          const activeOwners = await lockOwners(trx, c);
           const bootstrap = !(await trx("crm_sheet_sync_records").first("id"));
           summary.initial_review = bootstrap;
           for (const row of rows)
-            await importRow(trx, row, { ...c, bootstrap }, summary);
+            await importRow(
+              trx,
+              row,
+              { ...c, bootstrap, activeOwners },
+              summary,
+            );
           await trx("crm_sheet_sync_runs")
             .where({ id: run })
             .update({
@@ -370,14 +396,8 @@ module.exports = function (
         if (!c.configured) model.fail("SHEETS_CONFIG");
         if ((await candidates(trx, state.latest)).length)
           model.fail("SHEETS_BIND");
-        if (
-          !(await trx("users")
-            .where({ id: c.owner, is_active: 1 })
-            .forUpdate()
-            .first("id"))
-        )
-          model.fail("SHEETS_OWNER");
-        await createLead(trx, record, state, c, user);
+        const activeOwners = await lockOwners(trx, c);
+        await createLead(trx, record, state, { ...c, activeOwners }, user);
         return { ok: true };
       }),
     );
@@ -487,7 +507,18 @@ module.exports = function (
       .where({ status: "ok" })
       .orderBy("id", "desc")
       .first("completed_at");
+    const ownerMapping = {};
+    for (const [marker, id] of Object.entries({
+      E: c.owner,
+      P: c.ownerP,
+      I: c.ownerI,
+    })) {
+      ownerMapping[marker] = Number.isSafeInteger(id)
+        ? await db("users").where({ id }).first("id", "name", "is_active")
+        : null;
+    }
     return {
+      owner_mapping: ownerMapping,
       last_success: lastSuccess?.completed_at || null,
       enabled: c.enabled,
       configured: c.configured,
