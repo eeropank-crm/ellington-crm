@@ -1,6 +1,5 @@
 'use strict';
 const express = require('express');
-const workflow = require('../services/activity-workflow');
 const mailboxes=require('../services/mailboxes');
 const createSync=require('../services/mailbox-sync');
 const isId=v=>Number.isSafeInteger(Number(v))&&Number(v)>0;
@@ -41,19 +40,7 @@ module.exports = function(db, options={}) {
     }catch(e){next(e)}
   });
   // A customer reply is actionable work, not a dismissible notification.
-  router.post('/mail/reply-alerts/:id/handled',async(req,res,next)=>{
-    try {
-      const id=Number(req.params.id),note=workflow.text(req.body?.note,5000,'vastuse käsitlemise tulemus',5);
-      if(!Number.isSafeInteger(id)||id<1)throw new workflow.WorkflowError(400,'Vigane vastus.');
-      await db.transaction(async trx=>{
-        const row=await trx('crm_email_inbox').where({id}).first();
-        if(!row)throw new workflow.WorkflowError(404,'Vastust ei leitud.');
-        await workflow.lockClient(trx,row.client_id,req.crmUser);
-        await workflow.replies(trx,row.client_id,[id],req.crmUser,null,'reviewed',note);
-      });
-      res.json({handled:true});
-    } catch(e){if(e instanceof workflow.WorkflowError)return res.status(e.status).json({error:e.message});next(e)}
-  });
+  router.post('/mail/reply-alerts/:id/handled',(req,res)=>res.status(409).json({error:'Vastuse käsitlemiseks kasuta Vasta kliendile. Vastus märgitakse käsitletuks pärast edukat saatmist.'}));
   if (options.schedule!==false && mailboxes.pollingEnabled(options.env||process.env)) {
     const timer = setInterval(() => sync().then(report=>{if(report.mailboxes?.some(m=>m.status!=='ok'||m.message_errors))console.error('[CRM IMAP] Mõne postkasti sünkroonimine vajab kontrollimist.');}).catch(()=>console.error('[CRM IMAP] Sünkroonimine ebaõnnestus; privaatsed veateated peidetud.')), 5 * 60 * 1000);
     timer.unref();

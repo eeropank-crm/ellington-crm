@@ -19,3 +19,9 @@ Automaatkontroll: `test/mail-signatures.test.js` kontrollib koostamist, kasutaja
 Sünteetilise MariaDB 11.4.13 keskkonna tulemus: 99 meili-, tegevuse-, töörežiimi- ja järjekorratesti läbitud. Chromiumis kontrolliti allkirja kuvamist kirja all, oma allkirja salvestamist ning administraatori allkirjahaldust. JavaScripti vigu ega saatmispäringuid ei tekkinud. Ekraanipildid asuvad kataloogis `docs/email-signatures/`.
 
 Paigalduse, pärandskeemi, skeemiühilduvuse, tervisekontrolli ja ühenduse SQL-režiimi kontrollid: veel 33 testi läbitud, 0 ebaõnnestunud ja 0 vahele jäetud. Kokku läbisid kõik hoidla 132 automaattesti. Isoleeritud täispaigaldus kontrollis varukoopiaid, migratsioone ja andmesisu säilimist; taastamist kontrolliti eraldi tühja testandmebaasi kaudu. Zone.ee serveriga ühendust ei loodud.
+
+## Ühilduvus pärast PR #17 ühendamist
+
+PR #16 harusse ühendati värske main-haru koos PR #17 parandustega tavapärase merge-commit’i kaudu, ajalugu ümber kirjutamata. Säilivad kliendile vastamise vorm, vastuse käsitlemine alles pärast edukat saatmist, meilivestluse päised, 14-päevane vaikimisi ooteaeg ning kordusteta ajaloo kuvamine. Allkirja lisatakse üks kord ka uue töövoo vastuskirjale; allkiri ei kandu kontrollkõne juhisesse.
+
+Ühendatud versiooni 113 rakenduse regressioonitesti läbisid. Uus koostoimetest kontrollib vastuskirja tekst/HTML-allkirja, niidipäiseid, käsitlemise hetke ja allkirjata järeltegevust. Chromiumis läbis sama koostoime arvutis ja mobiilis; pilt `docs/email-signatures/reply-composer.png`. Paigalduse kontrolli tulemused lisatakse kontrollimise järel.

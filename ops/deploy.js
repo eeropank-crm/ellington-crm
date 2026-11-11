@@ -35,7 +35,7 @@ function run(cmd,argv,options={}){
  return result.stdout;
 }
 function inventory(revision){
- const releaseRequired=required.concat(['server/services/mail-signatures.js','public/mail-signatures.js','database/migrations/006_user_mail_signatures.js','server/services/mail-content.js','server/services/work-queues.js','server/services/mailboxes.js','server/services/mailbox-sync.js','ops/staff-mailbox-settings.js','ops/configure-staff-mailboxes.js','server/routes/work-queues.js','database/migrations/005_daily_work_queues.js']);
+ const releaseRequired=required.concat(['server/services/mail-signatures.js','public/mail-signatures.js','database/migrations/006_user_mail_signatures.js','server/services/mail-content.js','server/services/customer-replies.js','public/mail-history.js','server/services/work-queues.js','server/services/mailboxes.js','server/services/mailbox-sync.js','ops/staff-mailbox-settings.js','ops/configure-staff-mailboxes.js','server/routes/work-queues.js','database/migrations/005_daily_work_queues.js']);
  const head=run('git',['rev-parse','HEAD']).trim();
  if(revision!==head||!/^[a-f0-9]{40}$/.test(revision))throw Error('--revision peab võrduma checkout HEAD täieliku commit SHA-ga.');
  if(run('git',['status','--porcelain','--untracked-files=no']).trim())throw Error('Checkout sisaldab commit’imata muudatusi.');

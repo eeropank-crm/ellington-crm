@@ -7,6 +7,7 @@ const workflow=require('../services/activity-workflow');
 const mailboxes=require('../services/mailboxes');
 const mailContent=require('../services/mail-content');
 const signatures=require('../services/mail-signatures');
+const customerReplies=require('../services/customer-replies');
 module.exports=function(db,options={}){
  const r=express.Router();
  const admin=(req,res)=>req.crmUser.role==='admin'||(res.status(403).json({error:'Ainult administraatorile.'}),false);
@@ -17,13 +18,14 @@ module.exports=function(db,options={}){
  r.patch('/mail/signature',signatureAction(req=>signatures.save(db,req.crmUser,Number(req.crmUser.id),req.body||{})));
  r.patch('/admin/users-real/:id/signature',signatureAction(req=>{if(req.crmUser.role!=='admin')throw new workflow.WorkflowError(403,'Ainult administraatorile.');return signatures.save(db,req.crmUser,Number(req.params.id),req.body||{});}));
 
+ r.post('/mail/replies/:id/draft',async(req,res,next)=>{try{if(!mailConfig(req.crmUser.id))throw new workflow.WorkflowError(409,'Sinu CRM-i postkast pole seadistatud.');res.json(await db.transaction(trx=>customerReplies.draft(trx,req.crmUser,Number(req.params.id))));}catch(e){if(e instanceof workflow.WorkflowError)return res.status(e.status).json({error:e.message});next(e);}});
  r.get('/mail/status',async(req,res,next)=>{try{const c=mailConfig(req.crmUser.id);res.json({configured:!!c,address:c?.address||null,...mailboxes.status(req.crmUser.id,options.env||process.env)});}catch(e){next(e)}});
  r.get('/admin/users-real',async(req,res,next)=>{try{if(!admin(req,res))return;const users=await db('users as u').leftJoin('crm_user_mail_settings as s','s.user_id','u.id').select('u.id','u.name','u.email','u.role','u.is_active','s.signature','s.version as signature_version').orderBy('u.id');res.json({users:users.map(u=>({...u,signature:u.signature||'',signature_version:u.signature_version||0,mailbox:mailboxes.status(u.id,options.env||process.env).address,mail_configured:!!mailConfig(u.id),imap_configured:mailboxes.status(u.id,options.env||process.env).imap_configured,imap_enabled:mailboxes.status(u.id,options.env||process.env).imap_enabled}))});}catch(e){next(e)}});
  r.post('/admin/users-real',async(req,res,next)=>{try{if(!admin(req,res))return;const {name,email,password,role}=req.body||{};if(typeof name!=='string'||name.trim().length<2||name.length>150||typeof email!=='string'||!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)||email.length>255||!['sales','admin'].includes(role)||typeof password!=='string'||password.length<12||password.length>128)return res.status(400).json({error:'Sisesta nimi, korrektne e-post, roll ja vähemalt 12-märgiline parool.'});const exists=await db('users').where({email:email.trim().toLowerCase()}).first('id');if(exists)return res.status(409).json({error:'See e-posti aadress on juba kasutusel.'});const [id]=await db('users').insert({name:name.trim(),email:email.trim().toLowerCase(),password_hash:await bcrypt.hash(password,12),role,is_active:1});res.json({id});}catch(e){next(e)}});
  r.patch('/admin/users-real/:id',async(req,res,next)=>{try{if(!admin(req,res))return;const id=Number(req.params.id);if(!goodId(id))return res.status(400).json({error:'Vigane kasutaja.'});const u=await db('users').where({id}).first();if(!u)return res.status(404).json({error:'Kasutajat ei leitud.'});const x=req.body||{};if(x.action==='password'){if(typeof x.password!=='string'||x.password.length<12||x.password.length>128)return res.status(400).json({error:'Parool peab olema vähemalt 12 märki.'});await db('users').where({id}).update({password_hash:await bcrypt.hash(x.password,12),updated_at:db.fn.now()});}
  else if(x.action==='active'){if(id===Number(req.crmUser.id)&&!x.active)return res.status(400).json({error:'Enda kontot ei saa peatada.'});if(x.active!==true&&x.active!==false)return res.status(400).json({error:'Vigane olek.'});if(!x.active&&u.role==='admin'){const n=await db('users').where({role:'admin',is_active:1}).count('* as n').first();if(Number(n.n)<=1)return res.status(409).json({error:'Viimast administraatorit ei saa peatada.'});}await db('users').where({id}).update({is_active:x.active?1:0,updated_at:db.fn.now()});}
  else return res.status(400).json({error:'Tundmatu toiming.'});res.json({ok:true});}catch(e){next(e)}});
- r.get('/mail/activity/:id',async(req,res,next)=>{try{const id=Number(req.params.id);if(!goodId(id))return res.status(400).json({error:'Vigane tegevus.'});const a=await db('crm_activities as a').leftJoin('crm_activity_details as d','d.activity_id','a.id').where('a.id',id).first('a.id','a.client_id','a.contact_id','a.owner_user_id','a.type','a.status','d.subject','d.instructions','d.purpose','d.template_id');if(!a)return res.status(404).json({error:'Tegevust ei leitud.'});if(a.owner_user_id!=req.crmUser.id)return res.status(403).json({error:'See tegevus ei kuulu sulle.'});if(a.type!=='E-kiri')return res.status(400).json({error:'See pole e-kirja tegevus.'});const contacts=await db('crm_contacts').where({client_id:a.client_id}).whereNotNull('email').select('id','name','email');const log=await db('crm_email_outbox').where({activity_id:id}).first('id','status','sent_at','recipient');const profile=await signatures.read(db,req.crmUser.id);res.json({activity:a,signature:profile,draft_body:signatures.format.strip(a.instructions||'',[profile.signature]),contacts,send:log||null,embedded_template:await workflow.embedded(db,id,a),configured:!!mailConfig(req.crmUser.id)});}catch(e){next(e)}});
+ r.get('/mail/activity/:id',async(req,res,next)=>{try{const id=Number(req.params.id);if(!goodId(id))return res.status(400).json({error:'Vigane tegevus.'});const a=await db('crm_activities as a').leftJoin('crm_activity_details as d','d.activity_id','a.id').where('a.id',id).first('a.id','a.client_id','a.contact_id','a.owner_user_id','a.type','a.status','d.subject','d.instructions','d.purpose','d.template_id');if(!a)return res.status(404).json({error:'Tegevust ei leitud.'});if(a.owner_user_id!=req.crmUser.id)return res.status(403).json({error:'See tegevus ei kuulu sulle.'});const client=await db('crm_clients').where({id:a.client_id,owner_user_id:req.crmUser.id}).first('id');if(!client)return res.status(403).json({error:'Klient ei kuulu sinu portfelli.'});if(a.type!=='E-kiri')return res.status(400).json({error:'See pole e-kirja tegevus.'});const contacts=await db('crm_contacts').where({client_id:a.client_id}).whereNotNull('email').select('id','name','email');const log=await db('crm_email_outbox').where({activity_id:id}).first('id','status','sent_at','recipient');const reply=await workflow.replyContext(db,id);const profile=await signatures.read(db,req.crmUser.id);res.json({activity:a,signature:profile,draft_body:signatures.format.strip(a.instructions||'',[profile.signature]),contacts,reply:reply?{id:Number(reply.id),sender:reply.sender,subject:reply.subject,body:reply.body}:null,send:log||null,embedded_template:await workflow.embedded(db,id,a),configured:!!mailConfig(req.crmUser.id)});}catch(e){next(e)}});
  r.post('/mail/activity/:id/send',async(req,res,next)=>{try{
  const id=Number(req.params.id),x=req.body||{};if(!goodId(id)||!goodId(x.contact_id))return res.status(400).json({error:'Vali kontaktisik.'});
  const subject=typeof x.subject==='string'?x.subject.trim():'';let body=typeof x.body==='string'?x.body.trim():'';
@@ -41,6 +43,13 @@ module.exports=function(db,options={}){
  if(!config)return {error:'Sinu CRM-i postkast pole veel seadistatud.',status:409};
  const contact=await trx('crm_contacts').where({id:Number(x.contact_id),client_id:a.client_id}).first();if(!contact)return {error:'Valitud kontaktisikut ei leitud.',status:400};
  const old=await trx('crm_email_outbox').where({activity_id:id}).forUpdate().first();if(old)return {error:'Selle tegevuse saatmine on juba registreeritud ('+old.status+'). Topeltsaatmise vältimiseks kontrolli ajalugu.',status:409};
+ const reply=await workflow.replyContext(trx,id);
+ if(reply){
+  if(Number(reply.client_id)!==Number(a.client_id)||Number(reply.mailbox_user_id)!==Number(req.crmUser.id))throw new workflow.WorkflowError(403,'Vastus ei kuulu sinu postkasti.');
+  if(reply.handled_at)throw new workflow.WorkflowError(409,'Kliendi vastus on juba käsitletud.');
+  if(recipient.toLowerCase()!==reply.sender.toLowerCase())throw new workflow.WorkflowError(400,'Vastuskiri tuleb saata algse vastuse saatjale.');
+  if(!/^<[^<>\s]{1,250}>$/.test(reply.message_id))throw new workflow.WorkflowError(409,'Algse kirja sõnumi ID vajab kontrollimist.');
+ }
  const detail=await trx('crm_activity_details').where({activity_id:id}).forUpdate().first();
  let selected;
  if(x.template_id==null&&await workflow.embedded(trx,id,detail)&&x.purpose===detail.purpose){
@@ -53,8 +62,10 @@ module.exports=function(db,options={}){
  // Reject a malformed chain before reserving or contacting SMTP.
  await workflow.followupPlan(trx,a,{...selected,instructions:body,subject});
  await workflow.validateReplies(trx,a.client_id,x.reply_ids);
+ if(!reply&&x.reply_ids?.length)throw new workflow.WorkflowError(409,'Vastamiseks kasuta Vasta kliendile.');
+ if(reply&&x.reply_ids?.some(replyId=>Number(replyId)!==Number(reply.id)))throw new workflow.WorkflowError(400,'Vastamise tegevus käsitleb ainult valitud kirja.');
  const messageId='<crm-'+id+'-'+crypto.randomUUID()+'@ellington.ee>';
- await trx('crm_email_outbox').insert({activity_id:id,client_id:a.client_id,contact_id:contact.id,user_id:req.crmUser.id,sender:config.address,recipient,subject,body:messageBody,message_id:messageId,status:'sending',created_at:trx.fn.now()});await workflow.event(trx,id,req.crmUser,'mail_sending_reserved',{});return {recipient,messageId,...selected};
+ await trx('crm_email_outbox').insert({activity_id:id,client_id:a.client_id,contact_id:contact.id,user_id:req.crmUser.id,sender:config.address,recipient,subject,body:messageBody,message_id:messageId,status:'sending',created_at:trx.fn.now()});await workflow.event(trx,id,req.crmUser,'mail_sending_reserved',{});return {recipient,messageId,...selected,thread:reply?{inReplyTo:reply.message_id,references:[reply.message_id]}:{}};
  });if(reserved.error)return res.status(reserved.status).json({error:reserved.error});
  const port=config.smtp.port;
  let info;
@@ -63,7 +74,7 @@ module.exports=function(db,options={}){
    const transport=(options.createTransport||nodemailer.createTransport)({host:config.smtp.host,port,secure:config.smtp.secure,auth:{user:config.address,pass:config.password},requireTLS:port!==465,tls:{minVersion:'TLSv1.2',rejectUnauthorized:true},connectionTimeout:12000,greetingTimeout:12000,socketTimeout:20000});
    try {
      const content=mailContent.render({body:messageBody,purpose:reserved.purpose});
-     info=await transport.sendMail({from:{name:req.crmUser.name+' | Ellington',address:config.address},to:reserved.recipient,subject,text:content.text,html:content.html,messageId:reserved.messageId,replyTo:config.address});
+     info=await transport.sendMail({from:{name:req.crmUser.name+' | Ellington',address:config.address},to:reserved.recipient,subject,text:content.text,html:content.html,messageId:reserved.messageId,replyTo:config.address,...reserved.thread});
      if(!Array.isArray(info.accepted)||!info.accepted.some(a=>String(a).toLowerCase()===reserved.recipient.toLowerCase()))throw Error('SMTP ei kinnitanud saaja vastuvõtmist.');
    } finally { if(typeof transport.close==='function')transport.close(); }
  } catch(e) {
@@ -84,6 +95,6 @@ module.exports=function(db,options={}){
    return res.status(503).json({error:'SMTP võttis kirja vastu, kuid CRM-i lõpetamise salvestus ebaõnnestus. Ära saada uuesti; palu administraatoril saatmisreservatsioon ja ajalugu üle kontrollida.'});
  }
  }catch(e){if(e instanceof workflow.WorkflowError)return res.status(e.status).json({error:e.message});next(e)}});
- r.get('/mail/client/:id/history',async(req,res,next)=>{try{const id=Number(req.params.id);if(!goodId(id))return res.status(400).json({error:'Vigane klient.'});const c=await db('crm_clients').where({id}).first('owner_user_id');if(!c)return res.status(404).json({error:'Klienti ei leitud.'});if(req.crmUser.role!=='admin'&&Number(c.owner_user_id)!==Number(req.crmUser.id))return res.status(403).json({error:'Ligipääs puudub.'});const rows=await db('crm_email_outbox as m').leftJoin('users as u','u.id','m.user_id').where('m.client_id',id).select('m.id','m.sender','m.recipient','m.subject','m.body','m.status','m.sent_at','m.created_at','u.name as user_name').orderBy('m.id','desc').limit(100);res.json({messages:rows});}catch(e){next(e)}});
+ r.get('/mail/client/:id/history',async(req,res,next)=>{try{const id=Number(req.params.id);if(!goodId(id))return res.status(400).json({error:'Vigane klient.'});const c=await db('crm_clients').where({id}).first('owner_user_id');if(!c)return res.status(404).json({error:'Klienti ei leitud.'});if(req.crmUser.role!=='admin'&&Number(c.owner_user_id)!==Number(req.crmUser.id))return res.status(403).json({error:'Ligipääs puudub.'});const rows=await db('crm_email_outbox as m').leftJoin('users as u','u.id','m.user_id').where('m.client_id',id).select('m.id','m.activity_id','m.sender','m.recipient','m.subject','m.body','m.status','m.sent_at','m.created_at','u.name as user_name').orderBy('m.id','desc').limit(100);res.json({messages:rows});}catch(e){next(e)}});
  return r;
 };
