@@ -33,10 +33,11 @@ async function pools(db,user,day){
   .modify(q=>{if(!admin)q.where('c.owner_user_id',user.id);})
   .whereNotExists(db('crm_activities as active').select(db.raw('1')).whereRaw('active.client_id=c.id').where('active.status','active'))
   .whereNotExists(db('crm_email_inbox as reply').select(db.raw('1')).whereRaw('reply.client_id=c.id').whereNull('reply.handled_at'))
-  .where(q=>q.where('c.followup_count','>',0)
+  .where(q=>q.where('c.followup_count','>',0).orWhere('c.client_type','Lead')
    .orWhereExists(db('crm_activities as done').select(db.raw('1')).whereRaw('done.client_id=c.id').where('done.status','completed'))
    .orWhereExists(db('crm_imported_history as imported').select(db.raw('1')).whereRaw('imported.client_id=c.id')))
   .select('c.id','c.name','c.owner_user_id','c.followup_count','u.name as owner_name',db.raw("NULLIF(CAST(GREATEST(COALESCE((SELECT MAX(done.updated_at) FROM crm_activities done WHERE done.client_id=c.id AND done.status='completed'),'1000-01-01'),COALESCE((SELECT MAX(imported.activity_date) FROM crm_imported_history imported WHERE imported.client_id=c.id),'1000-01-01')) AS CHAR),'1000-01-01') AS last_contact"))
+  .orderByRaw("(COALESCE(c.followup_count,0)>0 OR EXISTS(SELECT 1 FROM crm_activities prior WHERE prior.client_id=c.id AND prior.status='completed') OR EXISTS(SELECT 1 FROM crm_imported_history prior WHERE prior.client_id=c.id)) DESC")
   .orderByRaw('last_contact IS NOT NULL ASC').orderBy('last_contact').orderBy('c.id');
  return {...result,candidates};
 }
@@ -172,7 +173,11 @@ async function select(db,user,input={},day=w.today()){
  // back the entire batch, so retrying cannot send mail or duplicate a commit.
  for(let attempt=0;;attempt++){
   try{return await selectOnce(db,user,input,day);}
-  catch(e){if(e.code!=='ER_LOCK_DEADLOCK'||attempt>=2)throw e;}
+  catch(e){
+   if(e.code!=='ER_LOCK_DEADLOCK'||attempt>=4)throw e;
+   // Concurrent owners can contend on InnoDB index gaps. Do not retry in lockstep.
+   await new Promise(resolve=>setTimeout(resolve,Math.min(200,20*2**attempt)+Math.floor(Math.random()*20)));
+  }
  }
 }
 module.exports={read,select,stateOf,LIMIT,LANES};
