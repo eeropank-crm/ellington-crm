@@ -98,7 +98,7 @@ router.get('/clients/:id', async (req, res, next) => {
       const events = await db('crm_v8_activity_events as e')
         .leftJoin('users as actor', 'actor.id', 'e.user_id')
         .whereIn('e.activity_id', activityIds)
-        .whereIn('e.event_type', ['completed', 'completed_default_followup', 'completed_and_stopped', 'monitoring_stopped'])
+        .whereIn('e.event_type', ['completed', 'completed_default_followup', 'completed_and_stopped', 'monitoring_stopped', 'auto_followup_cancelled_reply'])
         .select('e.id', 'e.activity_id', 'e.event_type', 'e.details',
           'e.created_at', 'actor.name as actor_name')
         .orderBy('e.id', 'desc');
@@ -110,12 +110,16 @@ router.get('/clients/:id', async (req, res, next) => {
         const e = latestByActivity.get(a.id);
         let details = {};
         try { details = e && e.details ? JSON.parse(e.details) : {}; } catch (_) { /* preserve history even if malformed */ }
+        a.cancelled_by_reply = e?.event_type === 'auto_followup_cancelled_reply';
         a.result_comment = typeof details.comment === 'string' ? details.comment : (details.reason || '');
         a.outcome = typeof details.outcome === 'string' ? details.outcome : '';
         a.completed_at = e?.created_at || a.updated_at || null;
         a.completed_by = e?.actor_name || a.owner_name || null;
         a.has_completion_event = Boolean(e);
         a.completion_event_type = e?.event_type || '';
+        if(a.cancelled_by_reply) a.result_comment='Kliendi vastus saabus; automaatne järeltegevus tühistati.';
+        const sentMail=a.type==='E-kiri'&&await db('crm_email_outbox').where({activity_id:a.id,status:'sent'}).first('id','subject','recipient','sent_at');
+        a.sent_mail=sentMail||null;
         // Recover only evidence that exists: older mail completions did not record a comment.
         if (!a.result_comment && a.type === 'E-kiri') {
           const sent = await db('crm_email_outbox').where({activity_id:a.id,status:'sent'}).first();
