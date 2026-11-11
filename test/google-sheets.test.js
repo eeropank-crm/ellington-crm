@@ -23,6 +23,7 @@ const headers = [
   "staatus",
   "CRM ID",
   "allikas",
+  "Vastutaja",
 ];
 const makeRow = (company = "Synthetic Company " + crypto.randomUUID()) => [
   company,
@@ -35,6 +36,7 @@ const makeRow = (company = "Synthetic Company " + crypto.randomUUID()) => [
   "",
   crypto.randomUUID(),
   "Synthetic marketing",
+  "",
 ];
 let user,
   env,
@@ -503,7 +505,7 @@ test("Google source uses a signed read-only OAuth assertion, fixed HTTPS origins
             return new Response(JSON.stringify({ values: [headers] }));
           }
           assert.ok(url.includes("/values:batchGet?"));
-          const selected = [0, 1, 2, 3, 8, 7, 9];
+          const selected = [0, 1, 2, 3, 8, 7, 10, 9];
           assert.ok(!decodeURIComponent(url).includes("'Müük'!E2"));
           return new Response(
             JSON.stringify({
@@ -789,4 +791,121 @@ test("source ID preparation rejects duplicate identifiers without replacing any 
   assert.throws(() => context.fillCrmIds_(sheet), /Korduv/);
   assert.deepEqual(cells, before);
   assert.equal(released, true);
+});
+
+test("P/I markers route only new leads while E/blank use the default owner and existing ownership never changes", async () => {
+  const owners = {};
+  for (const marker of ["P", "I"]) {
+    const [id] = await db("users").insert({
+      name: "Synthetic owner " + marker,
+      email: crypto.randomUUID() + "@example.invalid",
+      password_hash: "synthetic-non-login",
+      role: "sales",
+      is_active: 1,
+    });
+    owners[marker] = id;
+    env["CRM_SHEETS_OWNER_" + marker + "_ID"] = String(id);
+  }
+  rows = ["P", "I", "E", ""].map((marker) => {
+    const r = makeRow();
+    r[10] = marker;
+    return r;
+  });
+  assert.equal((await sync()).created, 4);
+  for (const row of rows) {
+    const rec = await record(row[8]),
+      client = await db("crm_clients").where({ id: rec.client_id }).first();
+    assert.equal(client.owner_user_id, owners[row[10]] || user.id);
+    assert.equal(client.followup_count, 0);
+  }
+  const bound = await record(rows[0][8]);
+  rows[0][10] = "I";
+  rows[0][1] = "Source person renamed";
+  await sync();
+  assert.equal(
+    (await db("crm_clients").where({ id: bound.client_id }).first())
+      .owner_user_id,
+    owners.P,
+  );
+  const held = makeRow();
+  held[7] = "old status";
+  held[10] = "I";
+  rows = [held];
+  await sync();
+  const rec = await record(held[8]);
+  await service.createPending(user, rec.id, {
+    version: await version(held[8]),
+    confirm: true,
+  });
+  assert.equal(
+    (
+      await db("crm_clients")
+        .where({ id: (await record(held[8])).client_id })
+        .first()
+    ).owner_user_id,
+    owners.I,
+  );
+  const report = await service.status();
+  assert.equal(report.owner_mapping.P.id, owners.P);
+  assert.equal(report.owner_mapping.I.id, owners.I);
+});
+
+test("the real legacy C/Faas layout is recognized explicitly, a named Vastutaja column survives reordering and unknown markers fail closed", () => {
+  const real = [
+    "kuupäev esmakontakt",
+    "Faas",
+    "Faas",
+    "firma nimi",
+    "inimese nimi",
+    "meiliaadress",
+    "telefon",
+    "staatus",
+    "CRM ID",
+  ];
+  const row = [
+    "",
+    "lead",
+    " p ",
+    "Synthetic company",
+    "Person",
+    "person@example.invalid",
+    "123",
+    "",
+    crypto.randomUUID(),
+  ];
+  assert.equal(model.parse([real, row])[0].ownerMarker, "P");
+  const moved = ["Vastutaja", ...headers.filter((h) => h !== "Vastutaja")],
+    raw = ["I", ...makeRow().slice(0, 10)];
+  assert.equal(model.parse([moved, raw])[0].ownerMarker, "I");
+  row[2] = "unknown";
+  assert.throws(
+    () => model.parse([real, row]),
+    (e) => e.code === "SHEETS_OWNER_MARKER" && e.details.row === 2,
+  );
+  assert.throws(
+    () => model.columns([...headers, "Vastutaja"]),
+    (e) => e.code === "SHEETS_HEADERS",
+  );
+});
+
+test("missing, inactive or colliding owner mappings never fall back to Eero or create partial clients", async () => {
+  const row = makeRow();
+  row[10] = "P";
+  rows = [row];
+  const before = await db("crm_clients").count("* as n").first(),
+    original = env.CRM_SHEETS_OWNER_P_ID;
+  for (const value of ["", String(user.id), "999999999"]) {
+    env.CRM_SHEETS_OWNER_P_ID = value;
+    assert.equal((await sync()).ok, false);
+    assert.deepEqual(await db("crm_clients").count("* as n").first(), before);
+  }
+  env.CRM_SHEETS_OWNER_P_ID = original;
+  await db("users")
+    .where({ id: Number(original) })
+    .update({ is_active: 0 });
+  assert.equal((await sync()).ok, false);
+  assert.deepEqual(await db("crm_clients").count("* as n").first(), before);
+  await db("users")
+    .where({ id: Number(original) })
+    .update({ is_active: 1 });
 });

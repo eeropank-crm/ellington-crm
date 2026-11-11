@@ -15,6 +15,8 @@ function config(env = process.env) {
     tab,
     file,
     owner,
+    ownerP: Number(env.CRM_SHEETS_OWNER_P_ID),
+    ownerI: Number(env.CRM_SHEETS_OWNER_I_ID),
     configured:
       /^[a-zA-Z0-9_-]{20,150}$/.test(id) &&
       tab.length > 0 &&

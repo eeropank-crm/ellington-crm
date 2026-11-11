@@ -22,6 +22,7 @@
       "Mõnel real puudub korrektne püsiv CRM ID või esineb korduv ID.",
     SHEETS_CREDENTIALS:
       "Teenusekonto võtmefail puudub või selle õigused ei sobi.",
+    SHEETS_OWNER_MARKER: "Vastutaja tähis peab olema P, I, E või tühi.",
     SHEETS_OWNER: "Uute leadide vaikimisi vastutaja puudub või on peatatud.",
     SHEETS_CONFIG: "Ühenduse seadistus on puudulik.",
     SHEETS_STALE:
@@ -52,6 +53,7 @@
         }).format(new Date(x))
       : "veel puudub";
   const labels = {
+    owner: "Vastutaja",
     company: "Ettevõte",
     name: "Kontaktisik",
     email: "E-post",
@@ -104,10 +106,10 @@
         : "Ühenduse seadistus on puudulik."
       : "Automaatne sünk on välja lülitatud.";
     $("content").innerHTML =
-      `<section><h2>Ajakava</h2><p>${esc(x.schedule)}</p><small>Taustakäsk peab olema serveri cron-is seadistatud. See vaade ise taimerit ei käivita.</small><p>Viimane edukas sünk: ${esc(time(x.last_success))}</p><h2>Viimased käivitused</h2>${x.runs.map((r) => `<p>${esc(time(r.created_at))} · ${esc(r.status)} ${r.summary.row ? `· tabeli rida ${r.summary.row}` : ""} · loetud ${esc(r.summary.read ?? "—")}, uusi ${esc(r.summary.created ?? 0)}, muudetud ${esc(r.summary.updated ?? 0)}, seostamata ${esc(r.summary.pending ?? 0)}, konfliktiga ${esc(r.summary.conflicts ?? 0)} ${esc(r.summary.code ? messages[r.summary.code] || "Kontrolli ühendust." : "")}</p>`).join("") || "<p>Käivitusi veel pole.</p>"}</section><h2>Seostamist või otsust ootavad read (${x.total})</h2>${x.records
+      `<section><h2>Ajakava</h2><p>Uued leadid: P → ${esc(x.owner_mapping?.P?.name || "seadistamata")}, I → ${esc(x.owner_mapping?.I?.name || "seadistamata")}, E või tühi → ${esc(x.owner_mapping?.E?.name || "seadistamata")}.</p><p>${esc(x.schedule)}</p><small>Taustakäsk peab olema serveri cron-is seadistatud. See vaade ise taimerit ei käivita.</small><p>Viimane edukas sünk: ${esc(time(x.last_success))}</p><h2>Viimased käivitused</h2>${x.runs.map((r) => `<p>${esc(time(r.created_at))} · ${esc(r.status)} ${r.summary.row ? `· tabeli rida ${r.summary.row}` : ""} · loetud ${esc(r.summary.read ?? "—")}, uusi ${esc(r.summary.created ?? 0)}, muudetud ${esc(r.summary.updated ?? 0)}, seostamata ${esc(r.summary.pending ?? 0)}, konfliktiga ${esc(r.summary.conflicts ?? 0)} ${esc(r.summary.code ? messages[r.summary.code] || "Kontrolli ühendust." : "")}</p>`).join("") || "<p>Käivitusi veel pole.</p>"}</section><h2>Seostamist või otsust ootavad read (${x.total})</h2>${x.records
         .map(
           (r) =>
-            `<section><h3>${esc(r.state.latest.data.company)}</h3><small>Tabeli rida ${r.state.latest.row} · püsiv ID ${esc(r.source_id)}</small><pre>${esc(JSON.stringify({ ...r.state.latest.data, ...r.state.latest.metadata, staatus: r.state.latest.lifecycleHint || "" }, null, 2))}</pre>${
+            `<section><h3>${esc(r.state.latest.data.company)}</h3><small>Tabeli rida ${r.state.latest.row} · püsiv ID ${esc(r.source_id)}</small><pre>${esc(JSON.stringify({ ...r.state.latest.data, ...r.state.latest.metadata, staatus: r.state.latest.lifecycleHint || "", vastutaja: r.state.latest.ownerMarker || "E" }, null, 2))}</pre>${
               r.status === "pending"
                 ? `<label>Otsi olemasolevat CRM-klienti <input id="search-${r.id}" value="${esc(r.state.latest.data.company)}"></label><button data-search="${r.id}">Otsi CRM-ist</button><label>CRM-klient <select id="client-${r.id}"><option value="">Vali klient</option>${r.candidates.map((c) => `<option value="${Number(c.id)}">${esc(c.name)}</option>`).join("")}</select></label><label>Kontaktisik <select id="contact-${r.id}"><option value="">Vali esmalt klient</option></select></label><button data-bind="${r.id}" data-version="${esc(r.version)}">Seosta kliendiga</button>${r.state.initial_review ? "<p>Esmase sünkroonimise rida vajab kinnitamist.</p>" : ""}${r.state.latest.lifecycleHint ? `<p>Tabeli staatus: ${esc(r.state.latest.lifecycleHint)}. Automaatset aktiveerimist ei tehtud.</p>` : ""}${!r.candidates.length ? `<button data-create="${r.id}" data-version="${esc(r.version)}">Lisa uue aktiivse leadina</button>` : ""}<small>Nime või e-posti kattumine on ainult vihje. Enne seostamist kontrolli kliendikaarti. Erinevad olemasolevad väärtused vajavad järgmist kinnitust.</small>`
                 : Object.entries(r.state.conflicts)
