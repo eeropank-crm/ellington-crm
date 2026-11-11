@@ -30,6 +30,11 @@ async function validateReplies(trx,clientId,ids) {
 }
 async function replies(trx,clientId,ids,user,activityId,action,note='') {
   const rows=await validateReplies(trx,clientId,ids);
+  if(rows.some(r=>!r.handled_at)){
+    const bound=activityId&&await replyContext(trx,activityId);
+    const sent=bound&&await trx('crm_email_outbox').where({activity_id:activityId,client_id:clientId,status:'sent'}).first('id');
+    if(action!=='completed'||!sent||rows.length!==1||Number(bound.id)!==Number(rows[0].id))fail(409,'Kliendi vastus märgitakse käsitletuks alles pärast seotud vastuskirja edukat saatmist.');
+  }
   for(const r of rows) if(!r.handled_at) {
     await trx('crm_email_inbox').where({id:r.id}).update({handled_at:trx.fn.now()});
     await event(trx,activityId||r.activity_id,user,'reply_handled',{reply_id:r.id,action,note});
@@ -61,12 +66,20 @@ function businessDate(day,days) {
   for(let left=days;left>0;){d.setUTCDate(d.getUTCDate()+1);if(![0,6].includes(d.getUTCDay()))left--;}
   return d.toISOString().slice(0,10);
 }
+async function replyContext(trx,id) {
+ const e=await trx('crm_v8_activity_events').where({activity_id:id,event_type:'created_customer_reply'}).first('details');
+ if(!e)return null;
+ const reply=await trx('crm_email_inbox').where({id:Number(parse(e.details).reply_id)||0}).first();
+ if(!reply)fail(409,'Vastuse algne kiri puudub.');
+ return reply;
+}
 async function embedded(trx,id,d) {
   if(!d||d.template_id!=null) return false;
-  const created=await trx('crm_v8_activity_events').where({activity_id:id,event_type:'created_default_followup'}).forUpdate().first('details');
+  const created=await trx('crm_v8_activity_events').where({activity_id:id}).whereIn('event_type',['created_default_followup','created_customer_reply']).forUpdate().first('details');
   return parse(created?.details).embedded_template===true;
 }
 async function followupPlan(trx,a,d,day=today()) {
+  if(await replyContext(trx,a.id)){const date=new Date(day+'T12:00:00Z');date.setUTCDate(date.getUTCDate()+14);return {source:'reply_wait',type:'Kõne',due_date:date.toISOString().slice(0,10),template_id:null,purpose:'Kontroll pärast vastust',instructions:'Kontrolli kliendiga suhtluse jätkamist.',subject:'',next_step_json:null,embedded_template:false};}
   let raw=d?.next_step_json;
   // Previously created root activities may predate the template's chain.
   if(!raw&&d?.template_id){const t=await trx('crm_templates').where({id:d.template_id,is_active:1}).first('next_step_json');raw=t?.next_step_json;}
@@ -105,7 +118,8 @@ async function complete(trx,id,user,x={}) {
   const details={outcome,comment,next_activity_id:nextId,due_date:due,default_followup:true,followup_source:next.source,followup:{type:next.type,purpose:next.purpose,subject:next.subject,instructions:next.instructions}};
   await event(trx,id,user,'completed_default_followup',details);
   await event(trx,nextId,user,'created_default_followup',{previous_activity_id:id,followup_source:next.source,embedded_template:next.embedded_template});
-  await replies(trx,c.id,x.reply_ids,user,id,'completed');
+  const reply=await replyContext(trx,id);
+  await replies(trx,c.id,reply?[Number(reply.id)]:x.reply_ids,user,id,'completed');
   return {completed:true,...details};
 }
 async function stop(trx,clientId,user,reason,replyIds) {
@@ -174,6 +188,7 @@ async function create(trx,user,x) {
   return {id};
 }
 async function editable(trx,id,user) {
+  if(await replyContext(trx,id))fail(409,'Vastuskirja sisu ja malli saab muuta kirja koostamise vormis.');
   if(user.role==='admin') fail(403,'Tegevuse muutmiseks lülitu tavakasutaja režiimi.');
   const {activity:a,client:c}=await lockActivity(trx,id,user);
   if(a.status!=='active'||c.stop_reason) fail(409,'Muuta saab ainult avatud kliendi aktiivset tegevust.');
@@ -200,4 +215,4 @@ async function edit(trx,id,user,x={}) {
   await event(trx,id,user,'activity_edited',audit);
   return {updated:true,...await editable(trx,id,user)};
 }
-module.exports={WorkflowError,TYPES,today,dateOnly,validDate,parse,text,event,allowed,lockClient,lockActivity,validateReplies,replies,planned,complete,stop,selectNext,postpone,create,editable,edit,chain,businessDate,embedded,followupPlan};
+module.exports={WorkflowError,TYPES,today,dateOnly,validDate,parse,text,event,allowed,lockClient,lockActivity,validateReplies,replies,planned,complete,stop,selectNext,postpone,create,editable,edit,chain,businessDate,embedded,followupPlan,replyContext};
