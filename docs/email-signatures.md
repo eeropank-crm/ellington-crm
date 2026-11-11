@@ -16,4 +16,4 @@ Saadetud kirja täielik tekst koos allkirjaga jääb väljuvate kirjade tabeliss
 
 Automaatkontroll: `test/mail-signatures.test.js` kontrollib koostamist, kasutajate eraldatust, õigusi, salvestamise konflikte, tekst/HTML-saatmist, ajalugu, järelkirja ja mahupiiranguid. SMTP on asendatud kohaliku mälus töötava testasendusega; päris kirju ei saadeta.
 
-Sünteetilise MariaDB 11.4.13 keskkonna tulemus: 99 meili-, tegevuse-, töörežiimi- ja järjekorratesti läbitud. Chromiumi kontroll ja paigalduse regressioonide tulemused lisatakse pärast nende lõpetamist.
+Sünteetilise MariaDB 11.4.13 keskkonna tulemus: 99 meili-, tegevuse-, töörežiimi- ja järjekorratesti läbitud. Chromiumis kontrolliti allkirja kuvamist kirja all, oma allkirja salvestamist ning administraatori allkirjahaldust. JavaScripti vigu ega saatmispäringuid ei tekkinud. Ekraanipildid asuvad kataloogis `docs/email-signatures/`.
