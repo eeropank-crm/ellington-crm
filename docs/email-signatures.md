@@ -17,3 +17,5 @@ Saadetud kirja täielik tekst koos allkirjaga jääb väljuvate kirjade tabeliss
 Automaatkontroll: `test/mail-signatures.test.js` kontrollib koostamist, kasutajate eraldatust, õigusi, salvestamise konflikte, tekst/HTML-saatmist, ajalugu, järelkirja ja mahupiiranguid. SMTP on asendatud kohaliku mälus töötava testasendusega; päris kirju ei saadeta.
 
 Sünteetilise MariaDB 11.4.13 keskkonna tulemus: 99 meili-, tegevuse-, töörežiimi- ja järjekorratesti läbitud. Chromiumis kontrolliti allkirja kuvamist kirja all, oma allkirja salvestamist ning administraatori allkirjahaldust. JavaScripti vigu ega saatmispäringuid ei tekkinud. Ekraanipildid asuvad kataloogis `docs/email-signatures/`.
+
+Paigalduse, pärandskeemi, skeemiühilduvuse, tervisekontrolli ja ühenduse SQL-režiimi kontrollid: veel 33 testi läbitud, 0 ebaõnnestunud ja 0 vahele jäetud. Kokku läbisid kõik hoidla 132 automaattesti. Isoleeritud täispaigaldus kontrollis varukoopiaid, migratsioone ja andmesisu säilimist; taastamist kontrolliti eraldi tühja testandmebaasi kaudu. Zone.ee serveriga ühendust ei loodud.
