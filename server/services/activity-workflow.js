@@ -197,18 +197,23 @@ async function editable(trx,id,user) {
   const d=await trx('crm_activity_details').where({activity_id:id}).forUpdate().first();
   const latest=await trx('crm_v8_activity_events').where({activity_id:id}).orderBy('id','desc').forUpdate().first('id');
   const version=crypto.createHash('sha256').update(JSON.stringify([a,d||null,c.owner_user_id,c.stop_reason,latest?.id||null])).digest('hex');
-  return {id:Number(a.id),type:a.type,due_date:dateOnly(a.due_date),template_id:d?.template_id||null,purpose:d?.purpose||'',subject:d?.subject||'',instructions:d?.instructions??a.notes??'',notes:a.notes??null,next_step_json:d?.next_step_json??null,version};
+  const selectedContact=a.contact_id?await trx('crm_contacts').where({id:a.contact_id,client_id:a.client_id}).first('name'):null;
+  return {id:Number(a.id),client_id:Number(a.client_id),contact_id:a.contact_id?Number(a.contact_id):null,contact_name:selectedContact?.name||'',type:a.type,due_date:dateOnly(a.due_date),template_id:d?.template_id||null,purpose:d?.purpose||'',subject:d?.subject||'',instructions:d?.instructions??a.notes??'',notes:a.notes??null,next_step_json:d?.next_step_json??null,version};
 }
 async function edit(trx,id,user,x={}) {
-  if(Object.keys(x).some(k=>!['type','template_id','purpose','subject','instructions','expected_version'].includes(k))) fail(400,'Vigased tegevuse muutmise väljad.');
+  if(Object.keys(x).some(k=>!['type','template_id','purpose','subject','instructions','contact_id','expected_version'].includes(k))) fail(400,'Vigased tegevuse muutmise väljad.');
   const before=await editable(trx,id,user);
   if(typeof x.expected_version!=='string'||x.expected_version!==before.version) fail(409,'Tegevus muutus. Sulge vorm ja ava tegevus uuesti.');
+  const contactId=Object.hasOwn(x,'contact_id')?x.contact_id:before.contact_id;
+  if(contactId!==null&&(!Number.isSafeInteger(contactId)||contactId<1)) fail(400,'Vali selle kliendi kontaktisik.');
+  const selectedContact=contactId===null?null:await trx('crm_contacts').where({id:contactId,client_id:before.client_id}).forUpdate().first('id','name');
+  if(contactId!==null&&!selectedContact) fail(400,'Vali selle kliendi kontaktisik.');
   // Changing the template never changes the existing due date or queue position.
   const values=await planned(trx,{...x,due_date:today()});
   if(x.type!=='E-kiri') values.subject='';
-  const audit={before,after:{type:x.type,...values,due_date:before.due_date}};
+  const audit={before,after:{type:x.type,contact_id:contactId,contact_name:selectedContact?.name||'',...values,due_date:before.due_date}};
   if(Buffer.byteLength(JSON.stringify(audit),'utf8')>64000) fail(400,'Muudatuse ajalugu on liiga mahukas. Lühenda tegevuse sisu.');
-  await trx('crm_activities').where({id}).update({type:x.type,notes:values.instructions.slice(0,5000)||null,updated_at:trx.fn.now()});
+  await trx('crm_activities').where({id}).update({type:x.type,contact_id:contactId,notes:values.instructions.slice(0,5000)||null,updated_at:trx.fn.now()});
   const exists=await trx('crm_activity_details').where({activity_id:id}).first('activity_id');
   if(exists) await trx('crm_activity_details').where({activity_id:id}).update(values);
   else await trx('crm_activity_details').insert({activity_id:id,...values});

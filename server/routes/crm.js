@@ -56,7 +56,7 @@ router.get('/clients/:id', async (req, res, next) => {
 
     const contacts = await db('crm_contacts')
       .where({ client_id: id })
-      .select('id', 'name', 'email', 'phone', 'position')
+      .select('id', 'client_id', 'name', 'email', 'phone', 'position', 'updated_at')
       .orderBy('id');
 
     const history = await db('crm_imported_history')
@@ -157,7 +157,7 @@ router.get('/clients/:id', async (req, res, next) => {
         our_comment: client.our_comment,
         notes: client.notes
       },
-      contacts,
+      contacts: contacts.map(require('../services/client-contacts').present),
       history
     });
   } catch (error) {
@@ -379,6 +379,7 @@ router.post('/admin/portfolio-transfer',async(req,res,next)=>{
   }catch(e){next(e);}
 });
 
+router.use(require('./client-contacts')(db));
 router.use(require('./google-sheets')(db));
 router.use(require('./work-queues')(db));
 router.use(require('./crm_budget_extension')(db));
