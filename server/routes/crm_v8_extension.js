@@ -92,7 +92,7 @@ module.exports = function(db) {
     if(!Number.isSafeInteger(id)||id<1)throw new w.WorkflowError(400,'Vigane tegevus.');
     return id;
   };
-  r.get('/v8/activities/:id/edit',action((trx,req)=>w.editable(trx,activityId(req),req.crmUser)));
+  r.get('/v8/activities/:id/edit',action(async(trx,req)=>{const value=await w.editable(trx,activityId(req),req.crmUser);return {...value,contacts:await trx('crm_contacts').where({client_id:value.client_id}).select('id','name','email','phone').orderBy('id')};}));
   r.patch('/v8/activities/:id',action((trx,req)=>w.edit(trx,activityId(req),req.crmUser,req.body||{})));
   r.post('/v8/activities/:id/resolve', action(async(trx,req)=>{
     const id=Number(req.params.id),x=req.body||{};
