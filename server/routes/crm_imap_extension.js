@@ -27,12 +27,14 @@ module.exports = function(db, options={}) {
     } catch (e) { next(e); }
   });
 
-  // CRM_REPLY_ALERTS_V2: only inbox messages visible to the logged-in owner/admin.
+  // Only actionable replies of monitored clients belong on the dashboard.
+  // Keep stopped clients' inbox messages untouched and available on their card.
   router.get('/mail/reply-alerts', async (req,res,next) => {
     try {
       let q=db('crm_email_inbox as i')
         .join('crm_clients as c','c.id','i.client_id')
-        .whereNull('i.handled_at');
+        .whereNull('i.handled_at')
+        .where(q=>q.whereNull('c.stop_reason').orWhere('c.stop_reason',''));
       if(req.crmUser.role!=='admin')q=q.where('c.owner_user_id',req.crmUser.id);
       const alerts=await q.orderBy('i.received_at','desc').limit(100)
         .select('i.id','i.client_id','c.owner_user_id','c.name as client_name','i.sender','i.subject','i.received_at');
