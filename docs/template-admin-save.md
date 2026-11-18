@@ -1,0 +1,11 @@
+# Mallisalvestuse töörežiimi kontroll
+
+Administraatori konto alustab tavakasutaja režiimis. Seansi töörežiim on ühine sama brauseriseansi vahelehtedele. Varem võis mallide vaheleht jääda administraatorivaatesse, kuigi teises vahelehes lülitati seanss tavakasutajaks. Malli salvestamisel vastas server siis õigesti 403 „Ainult administraatorile”, aga vorm ei pakkunud selget lahendust.
+
+See põhjus korrati sünteetilises keskkonnas kahe Chromiumi vahelehega. Tootmise seansse ega andmeid ei loetud; ekraanipilt üksi ei tõenda, millises teises vahelehes või seadistuses tootmise režiim muutus.
+
+Parandus kontrollib malli salvestamise eel konto ja töörežiimi serverist. Kui sama administraatori konto on seansis tavakasutaja režiimis, pakutakse sõnaselget kinnitust administraatori režiimi taastamiseks ja salvestamiseks. Vaikimisi õigusi ei tõsteta. Keeldumine jätab sisu vormi ning seansi tavakasutajaks. Teise kontoga sisselogimist või müügikasutaja kontot ei käsitleta administraatorina. Ebaõnnestunud salvestamine säilitab sisestatud sisu. Salvestusnupp on päringu ajal korduvklõpsu vastu kaitstud. Serveri olemasolev õiguste kontroll jääb muutmata; ka pärast eelkontrolli võib server õiguste muutumisel kirjutamisest keelduda. Sel juhul automaatset kordussalvestamist ei tehta.
+
+Kontroll: kõik 40 sihitud malli töörežiimi, töörežiimide, mallide järeltegevuste ja tegevuste muutmise automaattesti läbitud, 0 ebaõnnestunud ja 0 vahele jäetud. Viis uut eraldi testi kontrollivad administraatorit, sõnaselget režiimitaastamist, keeldumist, müügikasutaja/vahetunud konto kaitset ning vigast või ebaõnnestunud režiimivahetust. Chromiumis korrati vana vahelehega serveri 403 vastust, kontrolliti keeldumise järel sisu ja režiimi säilimist, kinnitusega ühekordset uue malli salvestamist ning olemasoleva malli muutmist. 0 JS viga ja 0 e-kirja saatmispäringut.
+
+Sünteetiline ekraanipilt: `docs/template-admin/saved.png`. Brauserikontroll: `scripts/check-template-admin-browser.cjs` (ainult kohaliku sünteetilise testandmebaasiga). Kasutati MariaDB 11.4.13 kohalikku sünteetilist testkeskkonda. Zone.ee-ga ei ühendutud, tootmist ei muudetud ja päris kirju ei saadetud. Migratsioonid ja serveri õiguste kontrollid on muutmata.
