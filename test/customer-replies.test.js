@@ -86,3 +86,31 @@ test('two simultaneous reply sends reserve one message and handle the bound repl
 test('SMTP acceptance followed by a DB failure keeps the reply unhandled and the durable send reservation blocks retry',async()=>{
  const f=await open(await fixture()),before=calls.length;await send(f,{subject:'Synthetic DB failure'},503);assert.equal(calls.length,before+1);assert.equal((await row(f)).handled_at,null);assert.equal((await db('crm_email_outbox').where({activity_id:f.id}).first()).status,'sending');assert.equal((await db('crm_clients').where({id:f.client}).first()).followup_count,3);await send(f,{},409);assert.equal(calls.length,before+1);
 });
+
+test('stopping an uninterested customer removes reply alerts without sending or altering inbox history',async()=>{
+ acting=users[0];const f=await open(await fixture()),before=await row(f),sentBefore=calls.length;
+ const outboxBefore=await db('crm_email_outbox').where({client_id:f.client}).orderBy('id');
+ const clientBefore=await db('crm_clients').where({id:f.client}).first();
+ assert((await api('/mail/reply-alerts')).alerts.some(a=>a.id===f.reply));
+ await db.transaction(trx=>w.stop(trx,f.client,users[0],'Klient ei ole huvitatud',[]));
+ assert(!(await api('/mail/reply-alerts')).alerts.some(a=>a.client_id===f.client));
+ assert.deepEqual(await row(f),before);assert.deepEqual(await db('crm_email_outbox').where({client_id:f.client}).orderBy('id'),outboxBefore);
+ assert.equal(calls.length,sentBefore);assert.equal((await db('crm_clients').where({id:f.client}).first()).followup_count,clientBefore.followup_count);
+ assert.equal((await db('crm_activities').where({id:f.id}).first()).status,'stopped');
+ assert((await api('/mail/client/'+f.client+'/replies')).replies.some(r=>r.id===f.reply));
+ await api('/mail/replies/'+f.reply+'/draft',{},409);
+});
+test('previously stopped customers and new incoming replies stay out of owner and admin alerts; active replies remain actionable',async()=>{
+ acting=users[0];const stopped=await fixture(),active=await fixture();
+ await db('crm_clients').where({id:stopped.client}).update({stop_reason:'Varem peatatud'});
+ const original=await row(stopped);const {id,...copy}=original;
+ const [later]=await db('crm_email_inbox').insert({...copy,message_id:'<later-'+crypto.randomUUID()+'@example.invalid>'});
+ for(const user of [users[0],users[1],users[2]]){
+  acting=user;const alerts=(await api('/mail/reply-alerts')).alerts;
+  assert(!alerts.some(a=>a.client_id===stopped.client));
+  if(user===users[1])assert(!alerts.some(a=>a.client_id===active.client));else assert(alerts.some(a=>a.id===active.reply));
+ }
+ acting=users[0];const history=(await api('/mail/client/'+stopped.client+'/replies')).replies;
+ assert(history.some(r=>r.id===stopped.reply));assert(history.some(r=>r.id===later));assert(history.every(r=>r.handled_at===null));
+ assert.deepEqual(await row(stopped),original);
+});
