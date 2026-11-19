@@ -16,7 +16,7 @@ async function fixture(){
  await db.transaction(async trx=>{await trx('crm_activities').where({id:completed.next_activity_id}).update({status:'stopped'});await w.event(trx,completed.next_activity_id,users[0],'auto_followup_cancelled_reply',{inbox_message_id:messageId,original_activity_id:task.id});});
  return {client,contact,reply,messageId,body,original:task.id,cancelled:completed.next_activity_id};
 }
-async function open(f){const x=await api('/mail/replies/'+f.reply+'/draft',{});return {...f,id:x.id};}
+async function open(f){const x=await api('/mail/replies/'+f.reply+'/draft',{});return {...f,...x};}
 async function send(f,extra={},status=200){return api('/mail/activity/'+f.id+'/send',{contact_id:f.contact,recipient:'customer@example.invalid',template_id:null,purpose:'Tänud tagasiside eest',subject:'Re: Original subject',body:'Thanks for the feedback',reply_ids:[f.reply],...extra},status);}
 async function row(f){return db('crm_email_inbox').where({id:f.reply}).first();}
 before(async()=>{
@@ -24,7 +24,7 @@ before(async()=>{
  for(const role of ['sales','sales','admin']){const [id]=await db('users').insert({name:'Synthetic reply user',email:crypto.randomUUID()+'@example.invalid',password_hash:'synthetic-non-login',role,is_active:1});users.push({id,role});}
  [template]=await db('crm_templates').insert({name:'Synthetic initial',purpose:'Synthetic initial',type:'E-kiri',subject:'Original subject',body:'Unique original mail body',is_active:1});
  acting=users[0];env={CRM_SMTP_HOST:'unused.invalid',CRM_SMTP_PORT:'465'};for(const u of users){env['CRM_MAILBOX_'+u.id]='sender'+u.id+'@example.invalid';env['CRM_MAIL_PASSWORD_'+u.id]='synthetic-unused';}
- const app=express();app.use(express.json());app.use((req,res,next)=>{req.crmUser=acting;req.session={userId:acting.id};next();});
+ const app=express();app.use(express.json());app.use((req,res,next)=>{req.crmUser=acting;req.session={userId:acting.id,workMode:acting.role==='admin'?'admin':'user'};next();});
  app.use(require('../server/routes/crm_mail_extension')(db,{env,createTransport:()=>({async sendMail(message){calls.push(message);if(message.subject==='Synthetic failure')throw Error('Synthetic SMTP error');if(message.subject==='Synthetic DB failure'){const reserved=await db('crm_email_outbox').where({message_id:message.messageId}).first();await db('crm_clients').where({id:reserved.client_id}).update({stop_reason:'Synthetic concurrent stop'});}return {accepted:[message.to],response:'250 synthetic'};},close(){}})}));
  app.use(require('../server/routes/crm_imap_extension')(db,{env,schedule:false}));app.use(require('../server/routes/crm'));
  server=app.listen(0,'127.0.0.1');await new Promise(r=>server.once('listening',r));base='http://127.0.0.1:'+server.address().port;
@@ -59,8 +59,8 @@ test('after sending the next step can be replanned or monitoring stopped with an
 test('SMTP uncertainty never handles the reply, increments counters or starts a waiting period; retries remain blocked',async()=>{
  const f=await open(await fixture()),before=await db('crm_clients').where({id:f.client}).first();await send(f,{subject:'Synthetic failure'},502);assert.equal((await row(f)).handled_at,null);assert.deepEqual(await db('crm_clients').where({id:f.client}).first(),before);assert.equal((await db('crm_activities').where({id:f.id}).first()).status,'active');assert.equal((await db('crm_email_outbox').where({activity_id:f.id}).first()).status,'uncertain');await send(f,{},409);
 });
-test('other users, administrators and transferred clients cannot answer through the wrong mailbox',async()=>{
- const f=await fixture();for(const u of users.slice(1)){acting=u;await api('/mail/replies/'+f.reply+'/draft',{},403);}acting=users[0];const draft=await open(f);await db('crm_clients').where({id:f.client}).update({owner_user_id:users[1].id});await send(draft,{},403);acting=users[1];await api('/mail/replies/'+f.reply+'/draft',{},403);acting=users[0];
+test('other users and admins cannot reply; a client transfer without moving its existing draft remains blocked',async()=>{
+ const f=await fixture();for(const u of users.slice(1)){acting=u;await api('/mail/replies/'+f.reply+'/draft',{},403);}acting=users[0];const draft=await open(f);await db('crm_clients').where({id:f.client}).update({owner_user_id:users[1].id});await send(draft,{},403);acting=users[1];await api('/mail/replies/'+f.reply+'/draft',{},409);acting=users[0];
 });
 test('invalid recipients, unrelated reply IDs and stale already-handled replies fail before SMTP',async()=>{
  const f=await open(await fixture()),other=await fixture(),count=calls.length;await send(f,{recipient:'wrong@example.invalid'},400);await send(f,{reply_ids:[other.reply]},400);assert.equal(calls.length,count);assert.equal((await row(f)).handled_at,null);await db('crm_email_inbox').where({id:f.reply}).update({handled_at:db.fn.now()});await send(f,{},409);assert.equal(calls.length,count);
@@ -113,4 +113,30 @@ test('previously stopped customers and new incoming replies stay out of owner an
  acting=users[0];const history=(await api('/mail/client/'+stopped.client+'/replies')).replies;
  assert(history.some(r=>r.id===stopped.reply));assert(history.some(r=>r.id===later));assert(history.every(r=>r.handled_at===null));
  assert.deepEqual(await row(stopped),original);
+});
+
+async function transferClient(f){acting=users[2];const x=await api('/admin/portfolio-transfer',{from_user_id:users[0].id,to_user_id:users[1].id,client_ids:[f.client]});assert.equal(x.transferred,1);acting=users[1];}
+test('new owner replies to transferred client from own mailbox, preserving original thread and history',async()=>{
+ acting=users[0];const f=await fixture(),inboxBefore=await row(f),oldOutbox=await db('crm_email_outbox').where({id:inboxBefore.outbox_id}).first();
+ await db('crm_user_mail_settings').insert({user_id:users[1].id,signature:'Synthetic new-owner signature'}).onConflict('user_id').merge({signature:'Synthetic new-owner signature'});
+ await transferClient(f);const clientBefore=await db('crm_clients').where({id:f.client}).first();
+ const opened=await open(f);assert.equal((await api('/mail/activity/'+opened.id)).signature.signature,'Synthetic new-owner signature');const count=calls.length;await send(opened);
+ assert.equal(calls.length,count+1);const sent=calls.at(-1);
+ assert(sent.text.includes('Synthetic new-owner signature'));assert.equal(sent.from.address,env['CRM_MAILBOX_'+users[1].id]);assert.equal(sent.replyTo,env['CRM_MAILBOX_'+users[1].id]);assert.equal(sent.to,'customer@example.invalid');assert.equal(sent.inReplyTo,f.messageId);
+ const received=await row(f);assert(received.handled_at);for(const key of ['mailbox_user_id','outbox_id','client_id','activity_id','sender','recipient','body','message_id'])assert.deepEqual(received[key],inboxBefore[key]);
+ assert.deepEqual(await db('crm_email_outbox').where({id:inboxBefore.outbox_id}).first(),oldOutbox);
+ const newOutbox=await db('crm_email_outbox').where({activity_id:opened.id}).first();assert.equal(newOutbox.user_id,users[1].id);assert.equal(newOutbox.sender,env['CRM_MAILBOX_'+users[1].id]);
+ const clientAfter=await db('crm_clients').where({id:f.client}).first();assert.equal(clientAfter.owner_user_id,users[1].id);assert.equal(clientAfter.followup_count,clientBefore.followup_count+1);
+ const next=await db('crm_activities').where({client_id:f.client,status:'active'}).first();assert.equal(next.owner_user_id,users[1].id);
+ acting=users[0];await api('/mail/replies/'+f.reply+'/draft',{},403);await send(opened,{},403);acting=users[1];await send(opened,{},409);acting=users[0];
+});
+test('already opened unsent draft is resumed by new owner after actual portfolio transfer',async()=>{
+ acting=users[0];const old=await open(await fixture()),before=await row(old);await transferClient(old);
+ const resumed=await open(old);assert.equal(resumed.id,old.id);assert.equal(resumed.resumed,true);assert.deepEqual(await row(old),before);
+ await send(resumed);assert.equal(calls.at(-1).from.address,env['CRM_MAILBOX_'+users[1].id]);acting=users[0];
+});
+test('transfer does not bypass durable send reservation or broken original-message provenance',async()=>{
+ acting=users[0];const f=await open(await fixture());await db('crm_email_outbox').insert({activity_id:f.id,client_id:f.client,contact_id:f.contact,user_id:users[0].id,sender:'sender@example.invalid',recipient:'customer@example.invalid',subject:'Reserved',body:'Reserved',message_id:crypto.randomUUID(),status:'uncertain'});
+ await transferClient(f);const resumed=await open(f),count=calls.length;await send(resumed,{},409);assert.equal(calls.length,count);
+ acting=users[0];const corrupt=await fixture(),other=await fixture();await db('crm_email_inbox').where({id:corrupt.reply}).update({outbox_id:(await row(other)).outbox_id});await transferClient(corrupt);await api('/mail/replies/'+corrupt.reply+'/draft',{},409);assert.equal(calls.length,count);acting=users[0];
 });

@@ -1,6 +1,14 @@
 'use strict';
 const w=require('./activity-workflow');
 const PURPOSE='Tänud tagasiside eest';
+// The current client owner may reply from their own mailbox after a transfer.
+// Keep original mailbox ownership immutable and validate the original thread.
+async function originalMessage(trx,reply,clientId){
+ if(Number(reply.client_id)!==Number(clientId))throw new w.WorkflowError(403,'Vastus ei kuulu sellele kliendile.');
+ const original=await trx('crm_email_outbox').where({id:reply.outbox_id,client_id:clientId,activity_id:reply.activity_id,user_id:reply.mailbox_user_id,status:'sent'}).first();
+ if(!original)throw new w.WorkflowError(409,'Vastuse algse saadetud kirja seos vajab kontrollimist.');
+ return original;
+}
 // Opening a reply is resumable work, not acknowledgement and not a send.
 async function draft(trx,user,id){
  if(!Number.isSafeInteger(id)||id<1)throw new w.WorkflowError(400,'Vigane vastus.');
@@ -8,12 +16,11 @@ async function draft(trx,user,id){
  if(!ref)throw new w.WorkflowError(404,'Vastust ei leitud.');
  const client=await w.lockClient(trx,ref.client_id,user);
  const reply=await trx('crm_email_inbox').where({id}).forUpdate().first();
- if(Number(reply.mailbox_user_id)!==Number(user.id))throw new w.WorkflowError(403,'Vastus kuulub teise kasutaja postkasti.');
  if(reply.handled_at||client.stop_reason)throw new w.WorkflowError(409,'Vastus on juba käsitletud või kliendi jälgimine lõpetatud.');
+ const original=await originalMessage(trx,reply,client.id);
  const events=await trx('crm_v8_activity_events as e').join('crm_activities as a','a.id','e.activity_id').where({'a.client_id':client.id,'e.event_type':'created_customer_reply'}).forUpdate().select('e.activity_id','e.details','a.owner_user_id','a.status');
  const prior=events.find(e=>Number(w.parse(e.details).reply_id)===id);
  if(prior){if(Number(prior.owner_user_id)!==Number(user.id)||prior.status!=='active')throw new w.WorkflowError(409,'Vastamise tegevus on juba muutunud. Kontrolli kliendikaarti.');return {id:Number(prior.activity_id),resumed:true};}
- const original=await trx('crm_email_outbox').where({id:reply.outbox_id,client_id:client.id,user_id:user.id,status:'sent'}).first();
  const contact=original&&await trx('crm_contacts').where({id:original.contact_id,client_id:client.id}).first();
  if(!contact)throw new w.WorkflowError(409,'Vastusega seotud kontaktisik puudub. Kontrolli kliendikaarti.');
  const template=await trx('crm_templates').where({type:'E-kiri',is_active:1}).where(q=>q.where({purpose:PURPOSE}).orWhere({name:PURPOSE})).orderBy('id').first();
@@ -24,4 +31,4 @@ async function draft(trx,user,id){
  await w.event(trx,activity,user,'created_customer_reply',{reply_id:id,embedded_template:true});
  return {id:activity,resumed:false};
 }
-module.exports={draft,PURPOSE};
+module.exports={draft,PURPOSE,originalMessage};
