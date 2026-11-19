@@ -45,7 +45,7 @@ module.exports=function(db,options={}){
  const old=await trx('crm_email_outbox').where({activity_id:id}).forUpdate().first();if(old)return {error:'Selle tegevuse saatmine on juba registreeritud ('+old.status+'). Topeltsaatmise vältimiseks kontrolli ajalugu.',status:409};
  const reply=await workflow.replyContext(trx,id);
  if(reply){
-  if(Number(reply.client_id)!==Number(a.client_id)||Number(reply.mailbox_user_id)!==Number(req.crmUser.id))throw new workflow.WorkflowError(403,'Vastus ei kuulu sinu postkasti.');
+  await customerReplies.originalMessage(trx,reply,a.client_id);
   if(reply.handled_at)throw new workflow.WorkflowError(409,'Kliendi vastus on juba käsitletud.');
   if(recipient.toLowerCase()!==reply.sender.toLowerCase())throw new workflow.WorkflowError(400,'Vastuskiri tuleb saata algse vastuse saatjale.');
   if(!/^<[^<>\s]{1,250}>$/.test(reply.message_id))throw new workflow.WorkflowError(409,'Algse kirja sõnumi ID vajab kontrollimist.');
